@@ -298,6 +298,23 @@ def show_login_page():
                         st.error(result["error"])
                 else:
                     st.error("Please enter both email and password")
+        
+        # Forgot Password button
+        if st.button("🔒 Forgot Password?"):
+            st.session_state.show_forgot_password = True
+            st.rerun()
+        
+        # Show forgot password form
+        if st.session_state.get('show_forgot_password', False):
+            st.markdown("---")
+            st.subheader("🔒 Forgot Password")
+            st.info("Please contact the administrator to reset your password.")
+            st.write("**Admin Email:** corysmth14@gmail.com")
+            st.write("**Instructions:** Send an email with your account email address and request a password reset.")
+            
+            if st.button("❌ Cancel"):
+                st.session_state.show_forgot_password = False
+                st.rerun()
     
     with register_tab:
         st.subheader("Create New Account")
