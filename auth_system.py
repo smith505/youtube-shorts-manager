@@ -201,6 +201,10 @@ class UserManager:
                     return {"success": False, "error": "Account pending approval"}
             return {"success": False, "error": "Invalid email or password"}
         
+        # Check if user has password field (for backwards compatibility)
+        if 'password' not in found_user:
+            return {"success": False, "error": "Account needs password update. Please contact admin."}
+            
         if not self.verify_password(password, found_user['password']):
             return {"success": False, "error": "Invalid email or password"}
         
@@ -301,11 +305,11 @@ class UserManager:
 def show_login_page():
     """Show login and registration interface."""
     
-    # Clear any old authentication state
-    if 'authenticated' in st.session_state:
-        del st.session_state['authenticated']
-    if 'user' in st.session_state:
-        del st.session_state['user']
+    # Clear any old authentication state completely
+    keys_to_clear = ['authenticated', 'user', 'user_manager', 'drive_manager', 'claude_client', 'channel_manager']
+    for key in keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
     
     # Initialize user manager
     if 'user_manager' not in st.session_state:
@@ -332,6 +336,12 @@ def show_login_page():
         st.query_params.clear()
     
     st.title("🎬 YouTube Shorts Manager")
+    
+    # Debug button to clear cache
+    if st.button("🔄 Clear Cache & Refresh"):
+        st.cache_data.clear()
+        st.rerun()
+    
     st.markdown("---")
     
     # Create tabs for Login and Registration
