@@ -369,30 +369,42 @@ def show_login_page():
     with login_tab:
         st.subheader("Login to Your Account")
         
-        # Initialize saved credentials in session state
-        if 'saved_email' not in st.session_state:
-            st.session_state.saved_email = ""
-        if 'saved_password' not in st.session_state:
-            st.session_state.saved_password = ""
+        # Load saved credentials from file
+        def load_saved_credentials():
+            try:
+                if os.path.exists('.remember_me.json'):
+                    with open('.remember_me.json', 'r') as f:
+                        return json.load(f)
+                return {"email": "", "password": "", "remember": False}
+            except:
+                return {"email": "", "password": "", "remember": False}
+        
+        def save_credentials(email, password, remember):
+            try:
+                data = {"email": email if remember else "", "password": password if remember else "", "remember": remember}
+                with open('.remember_me.json', 'w') as f:
+                    json.dump(data, f)
+            except:
+                pass
+        
+        # Load saved credentials
+        saved_creds = load_saved_credentials()
+        saved_email = saved_creds.get("email", "")
+        saved_password = saved_creds.get("password", "")
+        saved_remember = saved_creds.get("remember", False)
         
         with st.form("login_form"):
-            email = st.text_input("Email:", value=st.session_state.saved_email, key="login_email")
-            password = st.text_input("Password:", type="password", value=st.session_state.saved_password, key="login_password")
-            remember_me = st.checkbox("Remember me", value=bool(st.session_state.saved_email), key="remember_me")
+            email = st.text_input("Email:", value=saved_email, key="login_email")
+            password = st.text_input("Password:", type="password", value=saved_password, key="login_password")
+            remember_me = st.checkbox("Remember me", value=saved_remember, key="remember_me")
             login_button = st.form_submit_button("🔑 Login", type="primary")
             
             if login_button:
                 if email and password:
                     result = st.session_state.user_manager.login_user(email, password)
                     if result["success"]:
-                        # Save credentials in session state if remember me is checked
-                        if remember_me:
-                            st.session_state.saved_email = email
-                            st.session_state.saved_password = password
-                        else:
-                            # Clear saved credentials if unchecked
-                            st.session_state.saved_email = ""
-                            st.session_state.saved_password = ""
+                        # Save credentials to file if remember me is checked
+                        save_credentials(email, password, remember_me)
                         
                         st.session_state.authenticated = True
                         st.session_state.user = result["user"]

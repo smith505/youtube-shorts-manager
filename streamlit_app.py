@@ -255,6 +255,11 @@ class GoogleDriveManager:
         try:
             backup_folder_name = "Backups"
             
+            # Validate that we have a service connection
+            if not self.service:
+                st.error(f"Google Drive service not available for backup folder creation")
+                return None
+            
             # Search for existing backup folder
             results = self.service.files().list(
                 q=f"name='{backup_folder_name}' and parents='{channel_folder_id}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
@@ -264,20 +269,30 @@ class GoogleDriveManager:
             folders = results.get('files', [])
             
             if folders:
-                return folders[0]['id']
+                backup_folder_id = folders[0]['id']
+                st.success(f"✅ Found existing backup folder for {channel_name}")
+                return backup_folder_id
             else:
                 # Create new backup folder
+                st.info(f"📁 Creating backup folder for {channel_name}...")
                 folder_metadata = {
                     'name': backup_folder_name,
                     'mimeType': 'application/vnd.google-apps.folder',
                     'parents': [channel_folder_id]
                 }
                 folder = self.service.files().create(body=folder_metadata, fields='id').execute()
-                return folder.get('id')
+                backup_folder_id = folder.get('id')
+                
+                if backup_folder_id:
+                    st.success(f"✅ Created backup folder for {channel_name}")
+                    return backup_folder_id
+                else:
+                    st.error(f"Failed to get backup folder ID for {channel_name}")
+                    return None
                 
         except Exception as e:
             st.error(f"Error getting/creating backup folder for {channel_name}: {str(e)}")
-            return channel_folder_id  # Fallback to channel folder
+            return None  # Return None instead of fallback to indicate failure
 
 
 class ClaudeClient:
@@ -498,8 +513,8 @@ class ChannelManager:
             # Get or create backup folder within the channel folder
             backup_folder_id = self.drive_manager.get_or_create_backup_folder(channel_folder_id, channel_name)
             if not backup_folder_id:
-                st.warning("Could not access backup folder")
-                return False
+                st.error("❌ Failed to create or access backup folder - backups will be stored in main channel folder")
+                backup_folder_id = channel_folder_id  # Fallback to main channel folder
                 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
