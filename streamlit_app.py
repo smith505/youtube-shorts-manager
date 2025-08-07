@@ -512,35 +512,43 @@ class ChannelManager:
             # Get existing titles to avoid duplicates
             existing_titles = self.get_used_titles(channel_name, force_refresh=False)
             
-            # Filter out duplicates and empty titles
+            # Convert titles_list to set for O(1) duplicate checking within the input
+            titles_set = set()
             new_titles = []
             duplicate_count = 0
             
-            for title in titles_list:
-                title = title.strip()
-                if title:  # Not empty
-                    if title in existing_titles:
-                        duplicate_count += 1
-                    else:
-                        new_titles.append(title)
-                        existing_titles.add(title)  # Add to set to catch duplicates within the list
+            # Process titles in batches to prevent memory issues
+            batch_size = 100
+            total_added = 0
             
-            if new_titles:
-                # Get or create the channel folder
-                channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            for i in range(0, len(titles_list), batch_size):
+                batch = titles_list[i:i + batch_size]
+                batch_new_titles = []
                 
-                # Add all new titles at once
-                titles_content = "\n".join(new_titles) + "\n"
-                self.drive_manager.append_to_file(filename, titles_content, channel_folder_id)
+                for title in batch:
+                    title = title.strip()
+                    if title and title not in existing_titles and title not in titles_set:
+                        batch_new_titles.append(title)
+                        titles_set.add(title)
+                        existing_titles.add(title)  # Prevent duplicates in subsequent batches
+                    elif title:
+                        duplicate_count += 1
                 
-                # Update cache with new titles
-                cache_key = f"cached_titles_{channel_name}"
-                if cache_key in st.session_state:
-                    st.session_state[cache_key].update(new_titles)
-                else:
-                    st.session_state[cache_key] = set(new_titles)
-                
-            return len(new_titles), duplicate_count
+                # Write this batch to Google Drive if there are new titles
+                if batch_new_titles:
+                    channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+                    titles_content = "\n".join(batch_new_titles) + "\n"
+                    self.drive_manager.append_to_file(filename, titles_content, channel_folder_id)
+                    total_added += len(batch_new_titles)
+                    
+                    # Update cache with new titles from this batch
+                    cache_key = f"cached_titles_{channel_name}"
+                    if cache_key in st.session_state:
+                        st.session_state[cache_key].update(batch_new_titles)
+                    else:
+                        st.session_state[cache_key] = set(batch_new_titles)
+            
+            return total_added, duplicate_count
             
         except Exception as e:
             st.error(f"Failed to bulk add titles for {channel_name} to Google Drive: {str(e)}")
