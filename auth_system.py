@@ -20,6 +20,9 @@ class UserManager:
         self.drive_manager = drive_manager
         self.load_users()
         
+        # Auto-sync to Google Drive on startup
+        self.auto_sync_on_startup()
+        
     def load_users(self):
         """Load approved and pending users from files and Google Drive."""
         # Try to load from Google Drive first (for persistence across deployments)
@@ -33,14 +36,13 @@ class UserManager:
                 drive_content = self.drive_manager.read_file(self.users_file)
                 if drive_content.strip():
                     self.users = json.loads(drive_content)
+                    print("✅ Loaded users from Google Drive")
             
             # Fallback to local file
             if not self.users and os.path.exists(self.users_file):
                 with open(self.users_file, 'r') as f:
                     self.users = json.load(f)
-                    # If we loaded from local but have Drive access, sync to Drive
-                    if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
-                        self.save_users()
+                    print("📁 Loaded users from local file")
         except Exception as e:
             print(f"Error loading users: {str(e)}")
             self.users = {}
@@ -52,14 +54,13 @@ class UserManager:
                 drive_content = self.drive_manager.read_file(self.pending_file)
                 if drive_content.strip():
                     self.pending = json.loads(drive_content)
+                    print("✅ Loaded pending users from Google Drive")
             
             # Fallback to local file
             if not self.pending and os.path.exists(self.pending_file):
                 with open(self.pending_file, 'r') as f:
                     self.pending = json.load(f)
-                    # If we loaded from local but have Drive access, sync to Drive
-                    if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
-                        self.save_pending()
+                    print("📁 Loaded pending users from local file")
         except Exception as e:
             print(f"Error loading pending users: {str(e)}")
             self.pending = {}
@@ -91,6 +92,30 @@ class UserManager:
                 self.drive_manager.write_file(self.pending_file, content)
         except Exception as e:
             print(f"Error saving pending users: {str(e)}")
+    
+    def auto_sync_on_startup(self):
+        """Automatically sync users to Google Drive on startup."""
+        try:
+            # Only try auto-sync if we have local users but no drive connection
+            if (self.users or self.pending) and not (self.drive_manager and hasattr(self.drive_manager, 'service')):
+                # Try to create a Google Drive connection
+                try:
+                    from streamlit_app import GoogleDriveManager
+                    self.drive_manager = GoogleDriveManager()
+                    
+                    if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
+                        # Auto-sync existing users
+                        self.save_users()
+                        self.save_pending()
+                        print("✅ Auto-synced users to Google Drive on startup")
+                    
+                except Exception as sync_error:
+                    print(f"Auto-sync failed (non-critical): {str(sync_error)}")
+                    # Don't show error to user, just log it
+                    
+        except Exception as e:
+            print(f"Auto-sync error (non-critical): {str(e)}")
+            # Silent fail - don't interrupt app startup
     
     def hash_password(self, password: str) -> str:
         """Hash a password using bcrypt."""
