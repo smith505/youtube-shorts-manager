@@ -4,7 +4,6 @@ Advanced Authentication System with Email Approval
 import streamlit as st
 import json
 import os
-import bcrypt
 import smtplib
 import email.mime.text
 import email.mime.multipart
@@ -51,13 +50,6 @@ class UserManager:
         with open(self.pending_file, 'w') as f:
             json.dump(self.pending, f, indent=2, default=str)
     
-    def hash_password(self, password: str) -> str:
-        """Hash a password using bcrypt."""
-        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    
-    def verify_password(self, password: str, hashed: str) -> bool:
-        """Verify a password against its hash."""
-        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
     
     def validate_email(self, email: str) -> bool:
         """Validate email format."""
@@ -238,6 +230,12 @@ class UserManager:
 
 def show_login_page():
     """Show login and registration interface."""
+    
+    # Clear any old authentication state
+    if 'authenticated' in st.session_state:
+        del st.session_state['authenticated']
+    if 'user' in st.session_state:
+        del st.session_state['user']
     
     # Initialize user manager
     if 'user_manager' not in st.session_state:
