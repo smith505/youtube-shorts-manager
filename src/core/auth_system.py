@@ -457,12 +457,12 @@ def show_login_page():
         st.subheader("Login to Your Account")
         
         # Load saved credentials from computer-specific file
-        # Clean up all old remember me files 
+        # Clean up old system files (but keep .remember_me.json)
         def cleanup_old_files():
             import glob
             try:
-                # Remove all old remember me files
-                for file in glob.glob('.remember_me*.json'):
+                # Remove old system files but keep the main remember me file
+                for file in glob.glob('.remember_me_*.json'):  # Old browser-specific files
                     os.remove(file)
                 for file in glob.glob('.computer_id_override.txt'):
                     os.remove(file)
@@ -471,30 +471,70 @@ def show_login_page():
             except:
                 pass
         
-        # Clean up old files
+        # Clean up old files (but keep current remember me)
         cleanup_old_files()
         
-        # Load remember me state from session state
-        if 'remember_me_checked' not in st.session_state:
-            st.session_state.remember_me_checked = False
+        def load_saved_credentials():
+            """Load saved credentials from local file."""
+            try:
+                if os.path.exists('.remember_me.json'):
+                    with open('.remember_me.json', 'r') as f:
+                        return json.load(f)
+                return {"email": "", "password": "", "remember": False}
+            except:
+                return {"email": "", "password": "", "remember": False}
         
-        saved_remember = st.session_state.remember_me_checked
+        def save_credentials(email, password, remember):
+            """Save or clear credentials based on remember me setting."""
+            try:
+                if remember:
+                    data = {"email": email, "password": password, "remember": True}
+                    with open('.remember_me.json', 'w') as f:
+                        json.dump(data, f)
+                else:
+                    # Clear saved credentials
+                    if os.path.exists('.remember_me.json'):
+                        os.remove('.remember_me.json')
+            except:
+                pass
+        
+        # Load saved credentials
+        saved_creds = load_saved_credentials()
+        saved_email = saved_creds.get("email", "")
+        saved_password = saved_creds.get("password", "")
+        saved_remember = saved_creds.get("remember", False)
+        
+        # Auto-login if we have saved credentials
+        if saved_email and saved_password and saved_remember:
+            if 'auto_login_attempted' not in st.session_state:
+                st.session_state.auto_login_attempted = True
+                result = st.session_state.user_manager.login_user(saved_email, saved_password)
+                if result["success"]:
+                    st.session_state.authenticated = True
+                    st.session_state.user = result["user"]
+                    st.success(f"Welcome back, {result['user']['first_name']}! (Auto-logged in)")
+                    st.rerun()
+                else:
+                    # Clear invalid saved credentials
+                    save_credentials("", "", False)
+                    st.error("Saved credentials are invalid. Please login again.")
         
         # Simple Streamlit form that works
         with st.form("login_form"):
             st.markdown("### 🔑 Login")
-            email = st.text_input("Email:", key="login_email")
-            password = st.text_input("Password:", type="password", key="login_password")
-            remember_me = st.checkbox("Remember me", value=saved_remember, key="remember_me")
+            email = st.text_input("Email:", value=saved_email, key="login_email")
+            password = st.text_input("Password:", type="password", value=saved_password, key="login_password")
+            remember_me = st.checkbox("Remember me", value=saved_remember, key="remember_me", 
+                                    help="Save login credentials for auto-login on next visit")
             login_button = st.form_submit_button("🔑 Login", type="primary")
             
             if login_button:
-                # Save the remember me checkbox state
-                st.session_state.remember_me_checked = remember_me
-                
                 if email and password:
                     result = st.session_state.user_manager.login_user(email, password)
                     if result["success"]:
+                        # Save credentials if remember me is checked
+                        save_credentials(email, password, remember_me)
+                        
                         st.session_state.authenticated = True
                         st.session_state.user = result["user"]
                         st.success(f"Welcome back, {result['user']['first_name']}!")
@@ -503,6 +543,27 @@ def show_login_page():
                         st.error(result["error"])
                 else:
                     st.error("Please enter both email and password")
+        
+        # Debug info for remember me
+        if st.checkbox("🔍 Show remember me debug info", key="show_debug_remember"):
+            st.code(f"Remember me file: .remember_me.json")
+            if os.path.exists('.remember_me.json'):
+                st.write("✅ Remember me file exists")
+                try:
+                    with open('.remember_me.json', 'r') as f:
+                        data = json.load(f)
+                    st.write(f"Saved email: {data.get('email', 'None')}")
+                    st.write(f"Password saved: {'Yes' if data.get('password') else 'No'}")
+                    st.write(f"Remember enabled: {data.get('remember', False)}")
+                except:
+                    st.write("❌ Error reading remember me file")
+                
+                if st.button("🗑️ Clear Saved Credentials", key="clear_saved_creds"):
+                    save_credentials("", "", False)
+                    st.success("✅ Saved credentials cleared")
+                    st.info("🔄 Please refresh the page")
+            else:
+                st.write("❌ No remember me file found")
         
         # Add HTML to help Chrome's password manager
         password_manager_html = """
