@@ -204,6 +204,34 @@ class UserManager:
             }
         }
     
+    def reset_user_password(self, email: str, new_password: str) -> dict:
+        """Reset a user's password (admin only)."""
+        email = email.lower()
+        
+        if email not in self.users:
+            return {"success": False, "error": "User not found"}
+        
+        if len(new_password) < 6:
+            return {"success": False, "error": "Password must be at least 6 characters"}
+        
+        # Update the user's password
+        self.users[email]['password'] = self.hash_password(new_password)
+        self.save_users()
+        
+        return {"success": True, "message": f"Password reset for {email}"}
+    
+    def get_all_users(self) -> list:
+        """Get list of all approved users for admin management."""
+        return [
+            {
+                "first_name": data['first_name'],
+                "email": email,
+                "approved_at": data.get('approved_at', 'Unknown'),
+                "status": data.get('status', 'active')
+            }
+            for email, data in self.users.items()
+        ]
+    
     def get_pending_users(self) -> list:
         """Get list of pending users for admin approval."""
         return [
@@ -302,32 +330,93 @@ def show_login_page():
         if admin_password == "admin123":  # Change this password
             st.success("✅ Admin access granted")
             
-            # Show pending users
-            pending_users = st.session_state.user_manager.get_pending_users()
+            # Create tabs for different admin functions
+            approval_tab, users_tab, reset_tab = st.tabs(["👥 Pending Approvals", "👤 All Users", "🔑 Reset Password"])
             
-            if pending_users:
-                st.subheader("👥 Pending User Approvals")
+            with approval_tab:
+                # Show pending users
+                pending_users = st.session_state.user_manager.get_pending_users()
                 
-                for user in pending_users:
-                    with st.expander(f"{user['first_name']} ({user['email']})"):
-                        st.write(f"**Name:** {user['first_name']}")
-                        st.write(f"**Email:** {user['email']}")
-                        st.write(f"**Requested:** {user['requested_at']}")
+                if pending_users:
+                    st.subheader("👥 Pending User Approvals")
+                    
+                    for user in pending_users:
+                        with st.expander(f"{user['first_name']} ({user['email']})"):
+                            st.write(f"**Name:** {user['first_name']}")
+                            st.write(f"**Email:** {user['email']}")
+                            st.write(f"**Requested:** {user['requested_at']}")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button(f"✅ Approve", key=f"approve_{user['token']}"):
+                                    if st.session_state.user_manager.approve_user(user['token']):
+                                        st.success("User approved!")
+                                        st.rerun()
+                            
+                            with col2:
+                                if st.button(f"❌ Reject", key=f"reject_{user['token']}"):
+                                    if st.session_state.user_manager.reject_user(user['token']):
+                                        st.success("User rejected!")
+                                        st.rerun()
+                else:
+                    st.info("No pending user approvals")
+            
+            with users_tab:
+                # Show all approved users
+                all_users = st.session_state.user_manager.get_all_users()
+                
+                if all_users:
+                    st.subheader("👤 All Approved Users")
+                    
+                    for user in all_users:
+                        with st.expander(f"{user['first_name']} ({user['email']})"):
+                            st.write(f"**Name:** {user['first_name']}")
+                            st.write(f"**Email:** {user['email']}")
+                            st.write(f"**Approved:** {user['approved_at']}")
+                            st.write(f"**Status:** {user['status']}")
+                else:
+                    st.info("No approved users found")
+            
+            with reset_tab:
+                # Password reset functionality
+                st.subheader("🔑 Reset User Password")
+                
+                all_users = st.session_state.user_manager.get_all_users()
+                if all_users:
+                    # Select user to reset
+                    user_emails = [user['email'] for user in all_users]
+                    user_options = [f"{user['first_name']} ({user['email']})" for user in all_users]
+                    
+                    selected_index = st.selectbox(
+                        "Select user to reset password:",
+                        range(len(user_options)),
+                        format_func=lambda x: user_options[x],
+                        key="reset_user_select"
+                    )
+                    
+                    selected_email = user_emails[selected_index]
+                    
+                    with st.form("reset_password_form"):
+                        new_password = st.text_input("New Password (min 6 characters):", type="password", key="new_password")
+                        confirm_password = st.text_input("Confirm New Password:", type="password", key="confirm_new_password")
+                        reset_button = st.form_submit_button("🔑 Reset Password", type="primary")
                         
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button(f"✅ Approve", key=f"approve_{user['token']}"):
-                                if st.session_state.user_manager.approve_user(user['token']):
-                                    st.success("User approved!")
-                                    st.rerun()
-                        
-                        with col2:
-                            if st.button(f"❌ Reject", key=f"reject_{user['token']}"):
-                                if st.session_state.user_manager.reject_user(user['token']):
-                                    st.success("User rejected!")
-                                    st.rerun()
-            else:
-                st.info("No pending user approvals")
+                        if reset_button:
+                            if not new_password:
+                                st.error("Please enter a new password")
+                            elif len(new_password) < 6:
+                                st.error("Password must be at least 6 characters")
+                            elif new_password != confirm_password:
+                                st.error("Passwords don't match")
+                            else:
+                                result = st.session_state.user_manager.reset_user_password(selected_email, new_password)
+                                if result["success"]:
+                                    st.success(f"✅ {result['message']}")
+                                    st.info(f"New password for {selected_email}: **{new_password}**")
+                                else:
+                                    st.error(f"❌ {result['error']}")
+                else:
+                    st.info("No users available for password reset")
             
         elif admin_password:
             st.error("❌ Invalid admin password")
