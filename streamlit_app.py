@@ -41,6 +41,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 import time
 import re
+from datetime import datetime, timedelta
 
 # Page configuration
 st.set_page_config(
@@ -413,6 +414,53 @@ class ChannelManager:
             self.drive_manager.append_to_file(filename, script_content, channel_folder_id)
         except Exception as e:
             st.error(f"Failed to save script for {channel_name} to Google Drive: {str(e)}")
+    
+    def backup_channel_files(self, channel_name: str):
+        """Create backup of channel files (titles and scripts)."""
+        try:
+            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Backup titles file
+            titles_filename = f"titles_{channel_name.lower()}.txt"
+            titles_content = self.drive_manager.read_file(titles_filename, channel_folder_id)
+            if titles_content:
+                backup_titles = f"backup_titles_{channel_name.lower()}_{timestamp}.txt"
+                self.drive_manager.write_file(backup_titles, titles_content, channel_folder_id)
+            
+            # Backup scripts file
+            scripts_filename = f"saved_scripts_{channel_name.lower()}.txt"
+            scripts_content = self.drive_manager.read_file(scripts_filename, channel_folder_id)
+            if scripts_content:
+                backup_scripts = f"backup_scripts_{channel_name.lower()}_{timestamp}.txt"
+                self.drive_manager.write_file(backup_scripts, scripts_content, channel_folder_id)
+            
+            return True
+        except Exception as e:
+            st.error(f"Failed to backup {channel_name}: {str(e)}")
+            return False
+    
+    def clear_titles(self, channel_name: str):
+        """Clear all titles for a channel."""
+        try:
+            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            filename = f"titles_{channel_name.lower()}.txt"
+            self.drive_manager.write_file(filename, "", channel_folder_id)
+            return True
+        except Exception as e:
+            st.error(f"Failed to clear titles: {str(e)}")
+            return False
+    
+    def clear_scripts(self, channel_name: str):
+        """Clear all scripts for a channel."""
+        try:
+            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            filename = f"saved_scripts_{channel_name.lower()}.txt"
+            self.drive_manager.write_file(filename, "", channel_folder_id)
+            return True
+        except Exception as e:
+            st.error(f"Failed to clear scripts: {str(e)}")
+            return False
 
 
 def extract_titles_from_response(content: str) -> List[str]:
@@ -496,6 +544,18 @@ def main():
     
     st.markdown("---")
     
+    # Auto-backup functionality (runs every 3 hours)
+    if 'last_backup' not in st.session_state:
+        st.session_state.last_backup = {}
+    
+    # Check if backup is needed for each channel
+    for channel_name in st.session_state.channel_manager.get_channel_names():
+        last_backup_time = st.session_state.last_backup.get(channel_name, datetime.now() - timedelta(hours=4))
+        if datetime.now() - last_backup_time > timedelta(hours=3):
+            # Perform backup
+            if st.session_state.channel_manager.backup_channel_files(channel_name):
+                st.session_state.last_backup[channel_name] = datetime.now()
+    
     # Sidebar for channel management
     with st.sidebar:
         st.header("📁 Channel Management")
@@ -518,6 +578,17 @@ def main():
         channels = st.session_state.channel_manager.get_channel_names()
         if channels:
             selected_channel = st.selectbox("Select Channel", channels, key="selected_channel")
+            
+            # Show last backup time for admins
+            if user_role == 'admin' and selected_channel:
+                last_backup = st.session_state.last_backup.get(selected_channel)
+                if last_backup:
+                    time_since = datetime.now() - last_backup
+                    hours = int(time_since.total_seconds() / 3600)
+                    minutes = int((time_since.total_seconds() % 3600) / 60)
+                    st.caption(f"🕐 Last backup: {hours}h {minutes}m ago")
+                else:
+                    st.caption("🕐 No backup yet")
         else:
             selected_channel = None
             st.info("No channels yet. Create one below!")
@@ -564,12 +635,23 @@ def main():
     if selected_channel:
         st.header(f"📝 Generate Scripts for: {selected_channel}")
         
-        # Edit prompt button (admin only)
+        # Admin controls
         if user_role == 'admin':
-            col1, col2, col3 = st.columns([1, 1, 2])
+            col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
             with col1:
-                if st.button("✏️ Edit Channel Prompt"):
+                if st.button("✏️ Edit Prompt"):
                     st.session_state.editing_prompt = selected_channel
+            with col2:
+                if st.button("🗑️ Clear Titles"):
+                    st.session_state.clear_titles_confirm = selected_channel
+            with col3:
+                if st.button("🗑️ Clear Scripts"):
+                    st.session_state.clear_scripts_confirm = selected_channel
+            with col4:
+                if st.button("💾 Backup Now"):
+                    if st.session_state.channel_manager.backup_channel_files(selected_channel):
+                        st.success(f"✅ Backup created for {selected_channel}")
+                        st.session_state.last_backup[selected_channel] = datetime.now()
         
         # Handle prompt editing (no password needed for admins)
         if 'editing_prompt' in st.session_state and st.session_state.editing_prompt == selected_channel:
@@ -592,6 +674,64 @@ def main():
             else:
                 st.error("You don't have permission to edit prompts")
                 del st.session_state.editing_prompt
+        
+        # Clear Titles Confirmation Dialog
+        if 'clear_titles_confirm' in st.session_state and st.session_state.clear_titles_confirm == selected_channel:
+            st.markdown("---")
+            with st.expander("⚠️ **CONFIRM: Clear All Titles**", expanded=True):
+                st.error(f"**WARNING:** This will delete ALL titles for {selected_channel}!")
+                st.write("This action cannot be undone (but a backup will be created first).")
+                
+                # First confirmation
+                confirm1 = st.checkbox("I understand this will delete all titles", key="clear_titles_confirm1")
+                
+                # Second confirmation  
+                confirm2 = st.checkbox("I really want to delete all titles", key="clear_titles_confirm2")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🗑️ Yes, Clear All Titles", type="primary", disabled=not (confirm1 and confirm2)):
+                        # Create backup first
+                        st.session_state.channel_manager.backup_channel_files(selected_channel)
+                        # Clear titles
+                        if st.session_state.channel_manager.clear_titles(selected_channel):
+                            st.success(f"✅ All titles cleared for {selected_channel}")
+                            del st.session_state.clear_titles_confirm
+                            st.rerun()
+                
+                with col2:
+                    if st.button("❌ Cancel", key="cancel_clear_titles"):
+                        del st.session_state.clear_titles_confirm
+                        st.rerun()
+        
+        # Clear Scripts Confirmation Dialog
+        if 'clear_scripts_confirm' in st.session_state and st.session_state.clear_scripts_confirm == selected_channel:
+            st.markdown("---")
+            with st.expander("⚠️ **CONFIRM: Clear All Scripts**", expanded=True):
+                st.error(f"**WARNING:** This will delete ALL scripts for {selected_channel}!")
+                st.write("This action cannot be undone (but a backup will be created first).")
+                
+                # First confirmation
+                confirm1 = st.checkbox("I understand this will delete all scripts", key="clear_scripts_confirm1")
+                
+                # Second confirmation
+                confirm2 = st.checkbox("I really want to delete all scripts", key="clear_scripts_confirm2")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🗑️ Yes, Clear All Scripts", type="primary", disabled=not (confirm1 and confirm2)):
+                        # Create backup first
+                        st.session_state.channel_manager.backup_channel_files(selected_channel)
+                        # Clear scripts
+                        if st.session_state.channel_manager.clear_scripts(selected_channel):
+                            st.success(f"✅ All scripts cleared for {selected_channel}")
+                            del st.session_state.clear_scripts_confirm
+                            st.rerun()
+                
+                with col2:
+                    if st.button("❌ Cancel", key="cancel_clear_scripts"):
+                        del st.session_state.clear_scripts_confirm
+                        st.rerun()
         
         st.markdown("---")
         
