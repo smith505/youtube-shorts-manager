@@ -548,13 +548,18 @@ def main():
     if 'last_backup' not in st.session_state:
         st.session_state.last_backup = {}
     
-    # Check if backup is needed for each channel
-    for channel_name in st.session_state.channel_manager.get_channel_names():
-        last_backup_time = st.session_state.last_backup.get(channel_name, datetime.now() - timedelta(hours=4))
-        if datetime.now() - last_backup_time > timedelta(hours=3):
-            # Perform backup
-            if st.session_state.channel_manager.backup_channel_files(channel_name):
-                st.session_state.last_backup[channel_name] = datetime.now()
+    # Check if backup is needed for each channel (only if channel_manager exists)
+    if 'channel_manager' in st.session_state and st.session_state.channel_manager:
+        try:
+            for channel_name in st.session_state.channel_manager.get_channel_names():
+                last_backup_time = st.session_state.last_backup.get(channel_name, datetime.now() - timedelta(hours=4))
+                if datetime.now() - last_backup_time > timedelta(hours=3):
+                    # Perform backup
+                    if st.session_state.channel_manager.backup_channel_files(channel_name):
+                        st.session_state.last_backup[channel_name] = datetime.now()
+        except Exception as e:
+            # Silent fail for auto-backup
+            pass
     
     # Sidebar for channel management
     with st.sidebar:
