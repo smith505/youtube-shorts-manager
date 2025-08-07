@@ -650,6 +650,21 @@ def show_login_page():
                 
                 # Google Drive Sync Section
                 st.write("**☁️ Google Drive Sync:**")
+                
+                # Debug info
+                drive_manager = st.session_state.get('drive_manager', None)
+                if drive_manager:
+                    has_service = hasattr(drive_manager, 'service') and drive_manager.service
+                    st.write(f"Drive Manager: ✅ Available, Service: {'✅' if has_service else '❌'}")
+                else:
+                    st.write("Drive Manager: ❌ Not Available")
+                
+                # Show session state keys for debugging
+                with st.expander("🔧 Debug Info", expanded=False):
+                    st.write("**Session State Keys:**")
+                    session_keys = list(st.session_state.keys())
+                    st.write(session_keys)
+                
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("🔄 Sync Users to Google Drive", type="primary"):
@@ -668,6 +683,10 @@ def show_login_page():
                                 st.info("Check your 'YouTube Shorts Manager' folder in Google Drive")
                             else:
                                 st.error("❌ Google Drive not available. Make sure you're logged in and Drive is connected.")
+                                if drive_manager:
+                                    st.error(f"Drive manager exists but service is: {getattr(drive_manager, 'service', 'missing')}")
+                                else:
+                                    st.error("Drive manager is None - you need to use a channel feature first to initialize Google Drive")
                         except Exception as e:
                             st.error(f"❌ Sync failed: {str(e)}")
                 
