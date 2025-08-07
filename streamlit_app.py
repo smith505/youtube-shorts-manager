@@ -1146,10 +1146,10 @@ def main():
                             full_prompt = f"🚫 STRICT CONTENT VARIETY ENFORCEMENT: {exclusion_text}. You have already created {len(used_titles_list)} shorts. You MUST choose completely different movies, genres, decades, and topics. Prioritize variety - pick movies from different years, different genres, different studios. NO SEQUELS or related content to anything already used. {base_prompt}"
                         
                         # Add even more aggressive variety instructions
-                        full_prompt += f" \\n\\n🎯 VARIETY REQUIREMENTS: Mix different decades (1970s, 1980s, 1990s, 2000s, 2010s, 2020s), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries of origin. Avoid any thematic similarities to existing content."
+                        full_prompt += f" \\n\\n🎯 VARIETY REQUIREMENTS: Mix different decades (1970s, 1980s, 1990s, 2000s, 2010s, 2020s, and current 2025/recent releases), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries of origin. Avoid any thematic similarities to existing content."
                     else:
                         # Even for first generation, encourage variety
-                        full_prompt += " \\n\\n🎯 VARIETY PRIORITY: Ensure maximum variety in your selection. Choose movies from different decades, different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries. Avoid sequels or movies from the same franchise in a single batch."
+                        full_prompt += " \\n\\n🎯 VARIETY PRIORITY: Ensure maximum variety in your selection. Choose movies from different decades (1970s through present day 2025), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries. Avoid sequels or movies from the same franchise in a single batch."
                     
                     if extra_prompt.strip():
                         full_prompt += " " + extra_prompt.strip()
