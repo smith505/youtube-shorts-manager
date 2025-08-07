@@ -1108,6 +1108,13 @@ def main():
                             titles_list = []
                     
                     if titles_list:
+                        # Show processing indicator if deleting
+                        processing_key = f"processing_delete_{selected_channel}"
+                        is_processing = st.session_state.get(processing_key, False)
+                        
+                        if is_processing:
+                            st.warning("🔄 Processing deletion... Please wait")
+                        
                         st.write(f"**{len(titles_list)} titles found (in file order):**")
                         
                         # Show titles in groups of 5 for better organization
@@ -1119,7 +1126,17 @@ def main():
                                 with col1:
                                     st.write(f"• {title}")
                                 with col2:
-                                    if st.button("❌", key=f"delete_{title}_{hash(title)}", help=f"Delete: {title}"):
+                                    # Use a more unique key and add disabled state for rapid clicks
+                                    button_key = f"delete_{selected_channel}_{hash(title)}_{i}"
+                                    
+                                    # Check if we're currently processing a deletion
+                                    processing_key = f"processing_delete_{selected_channel}"
+                                    is_processing = st.session_state.get(processing_key, False)
+                                    
+                                    if st.button("❌", key=button_key, help=f"Delete: {title}", disabled=is_processing):
+                                        # Set processing flag to prevent rapid clicks
+                                        st.session_state[processing_key] = True
+                                        
                                         try:
                                             success, message = st.session_state.channel_manager.delete_title(selected_channel, title)
                                             if success:
@@ -1133,11 +1150,19 @@ def main():
                                                 if ordered_cache_key in st.session_state:
                                                     del st.session_state[ordered_cache_key]
                                                 
+                                                # Clear processing flag
+                                                st.session_state[processing_key] = False
+                                                
                                                 st.success(f"✅ Deleted: {title}")
+                                                # Short delay to prevent rapid clicking issues
+                                                import time
+                                                time.sleep(0.1)
                                                 st.rerun()
                                             else:
+                                                st.session_state[processing_key] = False
                                                 st.error(f"❌ {message}")
                                         except Exception as e:
+                                            st.session_state[processing_key] = False
                                             st.error(f"❌ Error deleting title: {str(e)}")
                                             import traceback
                                             st.error(f"Full error: {traceback.format_exc()}")
@@ -1155,6 +1180,10 @@ def main():
                 # Cancel button at the bottom
                 st.markdown("---")
                 if st.button("❌ Close", type="secondary"):
+                    # Clear processing flag when closing modal
+                    processing_key = f"processing_delete_{selected_channel}"
+                    if processing_key in st.session_state:
+                        del st.session_state[processing_key]
                     del st.session_state.delete_titles_modal
                     st.rerun()
         
