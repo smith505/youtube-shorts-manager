@@ -409,7 +409,7 @@ class UserManager:
 def show_login_page():
     """Show login and registration interface."""
     
-    # Clear any old authentication state (but keep saved credentials)
+    # Clear any old authentication state (but keep remember me checkbox state)
     keys_to_clear = ['authenticated', 'user', 'drive_manager', 'claude_client', 'channel_manager']
     for key in keys_to_clear:
         if key in st.session_state:
@@ -474,20 +474,24 @@ def show_login_page():
         # Clean up old files
         cleanup_old_files()
         
-        # No need to load saved credentials - let Chrome handle it
-        saved_email = ""
-        saved_password = ""
-        saved_remember = False
+        # Load remember me state from session state
+        if 'remember_me_checked' not in st.session_state:
+            st.session_state.remember_me_checked = False
+        
+        saved_remember = st.session_state.remember_me_checked
         
         # Simple Streamlit form that works
         with st.form("login_form"):
             st.markdown("### 🔑 Login")
             email = st.text_input("Email:", key="login_email")
             password = st.text_input("Password:", type="password", key="login_password")
-            remember_me = st.checkbox("Remember me", key="remember_me")
+            remember_me = st.checkbox("Remember me", value=saved_remember, key="remember_me")
             login_button = st.form_submit_button("🔑 Login", type="primary")
             
             if login_button:
+                # Save the remember me checkbox state
+                st.session_state.remember_me_checked = remember_me
+                
                 if email and password:
                     result = st.session_state.user_manager.login_user(email, password)
                     if result["success"]:
