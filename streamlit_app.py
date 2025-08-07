@@ -1112,21 +1112,18 @@ def main():
                 try:
                     # Always get fresh data from file to reflect manual changes
                     filename = f"titles_{selected_channel.lower()}.txt"
-                    st.write(f"DEBUG: Looking for file: {filename}")  # Debug
-                    
                     channel_folder_id = st.session_state.channel_manager.drive_manager.get_or_create_channel_folder(selected_channel)
-                    st.write(f"DEBUG: Channel folder ID: {channel_folder_id}")  # Debug
-                    
                     content = st.session_state.channel_manager.drive_manager.read_file(filename, channel_folder_id)
-                    st.write(f"DEBUG: File content length: {len(content) if content else 0}")  # Debug
-                    st.write(f"DEBUG: First 200 chars: {content[:200] if content else 'No content'}")  # Debug
                     
                     if content:
                         titles_list = [line.strip() for line in content.split('\n') if line.strip()]
                     else:
                         titles_list = []
-                    
-                    st.write(f"DEBUG: Found {len(titles_list)} titles")  # Debug
+                        st.warning(f"⚠️ The file {filename} is empty or doesn't exist in Google Drive")
+                        st.info("💡 **Possible solutions:**")
+                        st.write("• Generate some shorts first to create titles")
+                        st.write("• Check if your manual changes were saved to Google Drive")
+                        st.write("• Try using the '📝 Add Titles' button to add some titles")
                     
                     if titles_list:
                         # Show processing indicator if deleting
