@@ -479,94 +479,38 @@ def show_login_page():
         saved_password = ""
         saved_remember = False
         
-        # Use HTML form for proper Chrome password manager integration
-        login_form_html = """
-        <form method="post" action="#" autocomplete="on" id="login-form">
-            <div style="margin-bottom: 1rem;">
-                <label for="email" style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Email:</label>
-                <input 
-                    type="email" 
-                    id="email" 
-                    name="email"
-                    autocomplete="username"
-                    style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 1rem;"
-                    placeholder="Enter your email"
-                />
-            </div>
+        # Simple Streamlit form that works
+        with st.form("login_form"):
+            st.markdown("### 🔑 Login")
+            email = st.text_input("Email:", key="login_email")
+            password = st.text_input("Password:", type="password", key="login_password")
+            remember_me = st.checkbox("Remember me", key="remember_me")
+            login_button = st.form_submit_button("🔑 Login", type="primary")
             
-            <div style="margin-bottom: 1rem;">
-                <label for="password" style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Password:</label>
-                <input 
-                    type="password" 
-                    id="password" 
-                    name="password"
-                    autocomplete="current-password"
-                    style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 1rem;"
-                    placeholder="Enter your password"
-                />
-            </div>
-            
-            <div style="margin-bottom: 1rem;">
-                <label style="display: flex; align-items: center; cursor: pointer;">
-                    <input type="checkbox" id="remember" name="remember" style="margin-right: 0.5rem;"/>
-                    <span>Remember me</span>
-                </label>
-            </div>
-            
-            <button 
-                type="submit" 
-                style="width: 100%; padding: 0.75rem; background-color: #2563eb; color: white; border: none; border-radius: 0.375rem; font-size: 1rem; font-weight: 600; cursor: pointer;"
-                onmouseover="this.style.backgroundColor='#1d4ed8'"
-                onmouseout="this.style.backgroundColor='#2563eb'"
-            >
-                🔑 Login
-            </button>
-        </form>
-        
-        <script>
-            document.getElementById('login-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                const email = document.getElementById('email').value;
-                const password = document.getElementById('password').value;
-                const remember = document.getElementById('remember').checked;
-                
-                // Send data to Streamlit via query parameters
-                const params = new URLSearchParams(window.location.search);
-                params.set('login_email', email);
-                params.set('login_password', password);
-                params.set('login_remember', remember ? 'true' : 'false');
-                params.set('login_submit', 'true');
-                
-                // Reload page with login data
-                window.location.search = params.toString();
-            });
-        </script>
-        """
-        
-        st.components.v1.html(login_form_html, height=300)
-        
-        # Check for login submission via query parameters
-        query_params = st.query_params
-        if query_params.get('login_submit') == 'true':
-            email = query_params.get('login_email', '')
-            password = query_params.get('login_password', '')
-            remember_me = query_params.get('login_remember', 'false') == 'true'
-            
-            # Clear query parameters
-            st.query_params.clear()
-            
-            if email and password:
-                result = st.session_state.user_manager.login_user(email, password)
-                if result["success"]:
-                    st.session_state.authenticated = True
-                    st.session_state.user = result["user"]
-                    st.success(f"Welcome back, {result['user']['first_name']}!")
-                    st.rerun()
+            if login_button:
+                if email and password:
+                    result = st.session_state.user_manager.login_user(email, password)
+                    if result["success"]:
+                        st.session_state.authenticated = True
+                        st.session_state.user = result["user"]
+                        st.success(f"Welcome back, {result['user']['first_name']}!")
+                        st.rerun()
+                    else:
+                        st.error(result["error"])
                 else:
-                    st.error(result["error"])
-            else:
-                st.error("Please enter both email and password")
+                    st.error("Please enter both email and password")
+        
+        # Add HTML to help Chrome's password manager
+        password_manager_html = """
+        <div style="display: none;">
+            <form autocomplete="on">
+                <input type="email" name="username" autocomplete="username" />
+                <input type="password" name="password" autocomplete="current-password" />
+                <input type="submit" />
+            </form>
+        </div>
+        """
+        st.components.v1.html(password_manager_html, height=0)
         
         # Forgot Password button
         if st.button("🔒 Forgot Password?"):
