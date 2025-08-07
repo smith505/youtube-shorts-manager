@@ -1082,11 +1082,25 @@ def main():
         st.subheader("🎯 Generate New Script")
         extra_prompt = st.text_input("Extra prompt (optional):", help="Add any specific instructions for this generation")
         
-        if st.button("🚀 Generate Script", type="primary"):
-            if 'generating' not in st.session_state:
-                st.session_state.generating = True
-                
-                with st.spinner("Generating script..."):
+        # Check if currently generating
+        is_generating = st.session_state.get('generating', False)
+        
+        # Create button with disabled state based on generation status
+        generate_button = st.button(
+            "🚀 Generate Script" if not is_generating else "⏳ Generating...", 
+            type="primary",
+            disabled=is_generating,
+            key="generate_button"
+        )
+        
+        if generate_button and not is_generating:
+            st.session_state.generating = True
+            st.rerun()  # Force immediate UI update to show disabled button
+        
+        # Process generation if flag is set
+        if st.session_state.get('generating', False):
+            try:
+                with st.spinner("🎬 Generating your script... This may take 10-30 seconds..."):
                     # Get used titles for exclusion
                     used_titles = st.session_state.channel_manager.get_used_titles(selected_channel)
                     
@@ -1274,11 +1288,17 @@ def main():
                     else:
                         st.error(f"❌ Generation failed: {result['error']}")
                 
-                del st.session_state.generating
-        
-        # Show generation status
-        if 'generating' in st.session_state:
-            st.info("🔄 Generating script... Please wait.")
+                # Clear generating flag and force UI refresh
+                if 'generating' in st.session_state:
+                    del st.session_state.generating
+                    st.rerun()  # Refresh to re-enable the button
+            
+            except Exception as e:
+                # Ensure button is re-enabled even if an error occurs
+                st.error(f"❌ An unexpected error occurred: {str(e)}")
+                if 'generating' in st.session_state:
+                    del st.session_state.generating
+                st.rerun()
     
     else:
         st.info("👈 Select a channel from the sidebar or create a new one to get started!")
