@@ -324,8 +324,8 @@ class UserManager:
 def show_login_page():
     """Show login and registration interface."""
     
-    # Clear any old authentication state completely
-    keys_to_clear = ['authenticated', 'user', 'user_manager', 'drive_manager', 'claude_client', 'channel_manager']
+    # Clear any old authentication state (but keep saved credentials)
+    keys_to_clear = ['authenticated', 'user', 'drive_manager', 'claude_client', 'channel_manager']
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
@@ -369,15 +369,31 @@ def show_login_page():
     with login_tab:
         st.subheader("Login to Your Account")
         
+        # Initialize saved credentials in session state
+        if 'saved_email' not in st.session_state:
+            st.session_state.saved_email = ""
+        if 'saved_password' not in st.session_state:
+            st.session_state.saved_password = ""
+        
         with st.form("login_form"):
-            email = st.text_input("Email:", key="login_email")
-            password = st.text_input("Password:", type="password", key="login_password")
+            email = st.text_input("Email:", value=st.session_state.saved_email, key="login_email")
+            password = st.text_input("Password:", type="password", value=st.session_state.saved_password, key="login_password")
+            remember_me = st.checkbox("Remember me", value=bool(st.session_state.saved_email), key="remember_me")
             login_button = st.form_submit_button("🔑 Login", type="primary")
             
             if login_button:
                 if email and password:
                     result = st.session_state.user_manager.login_user(email, password)
                     if result["success"]:
+                        # Save credentials in session state if remember me is checked
+                        if remember_me:
+                            st.session_state.saved_email = email
+                            st.session_state.saved_password = password
+                        else:
+                            # Clear saved credentials if unchecked
+                            st.session_state.saved_email = ""
+                            st.session_state.saved_password = ""
+                        
                         st.session_state.authenticated = True
                         st.session_state.user = result["user"]
                         st.success(f"Welcome back, {result['user']['first_name']}!")

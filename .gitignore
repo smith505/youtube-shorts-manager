@@ -17,6 +17,7 @@ token.json
 users.json
 pending_users.json
 approval_emails.txt
+.remember_me.json
 
 # IDE files
 .vscode/
