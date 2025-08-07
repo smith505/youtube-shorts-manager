@@ -1178,7 +1178,26 @@ def main():
                                 st.write(f"{i}. {title}")
                         
                         st.subheader("📄 Generated Script:")
-                        st.code(content, language="text")
+                        
+                        # Create expandable section for better organization
+                        with st.expander("🔽 **View Full Generated Script**", expanded=True):
+                            # Use text_area with proper height and wrapping instead of st.code to prevent cutoff
+                            st.text_area(
+                                "Generated Content (Click to copy):",
+                                value=content,
+                                height=500,
+                                disabled=True,
+                                help="Full generated script with proper text wrapping - click and Ctrl+A to select all, then Ctrl+C to copy",
+                                key=f"script_display_{session_id}"
+                            )
+                            
+                            # Add character and word count
+                            word_count = len(content.split())
+                            char_count = len(content)
+                            st.caption(f"📊 **Stats:** {word_count} words, {char_count} characters")
+                            
+                            # Add copy button hint
+                            st.info("💡 **Tip:** Click inside the text area above, then use Ctrl+A to select all and Ctrl+C to copy the entire script.")
                         
                         st.info(f"Session ID: {session_id}")
                         
