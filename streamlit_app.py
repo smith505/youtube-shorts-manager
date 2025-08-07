@@ -530,6 +530,74 @@ class ChannelManager:
             st.error(f"Failed to bulk add titles for {channel_name} to Google Drive: {str(e)}")
             return 0, 0
     
+    def delete_title(self, channel_name: str, title_to_delete: str):
+        """Delete a specific title from a channel's Google Drive folder."""
+        filename = f"titles_{channel_name.lower()}.txt"
+        try:
+            # Get all current titles
+            current_titles = self.get_used_titles(channel_name, force_refresh=True)
+            
+            if title_to_delete not in current_titles:
+                return False, f"Title '{title_to_delete}' not found"
+            
+            # Remove the title from the set
+            current_titles.remove(title_to_delete)
+            
+            # Rewrite the entire file without the deleted title
+            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            new_content = "\n".join(sorted(current_titles)) + ("\n" if current_titles else "")
+            self.drive_manager.write_file(filename, new_content, channel_folder_id)
+            
+            # Update cache
+            cache_key = f"cached_titles_{channel_name}"
+            if cache_key in st.session_state:
+                st.session_state[cache_key].discard(title_to_delete)
+            
+            return True, f"Title '{title_to_delete}' deleted successfully"
+            
+        except Exception as e:
+            return False, f"Failed to delete title: {str(e)}"
+    
+    def bulk_delete_titles(self, channel_name: str, titles_to_delete: list):
+        """Delete multiple titles from a channel's Google Drive folder."""
+        if not titles_to_delete:
+            return 0, 0
+            
+        filename = f"titles_{channel_name.lower()}.txt"
+        try:
+            # Get all current titles
+            current_titles = self.get_used_titles(channel_name, force_refresh=True)
+            
+            # Count found and not found titles
+            deleted_count = 0
+            not_found_count = 0
+            
+            for title in titles_to_delete:
+                title = title.strip()
+                if title in current_titles:
+                    current_titles.remove(title)
+                    deleted_count += 1
+                else:
+                    not_found_count += 1
+            
+            if deleted_count > 0:
+                # Rewrite the entire file without the deleted titles
+                channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+                new_content = "\n".join(sorted(current_titles)) + ("\n" if current_titles else "")
+                self.drive_manager.write_file(filename, new_content, channel_folder_id)
+                
+                # Update cache
+                cache_key = f"cached_titles_{channel_name}"
+                if cache_key in st.session_state:
+                    for title in titles_to_delete:
+                        st.session_state[cache_key].discard(title.strip())
+            
+            return deleted_count, not_found_count
+            
+        except Exception as e:
+            st.error(f"Failed to bulk delete titles for {channel_name}: {str(e)}")
+            return 0, 0
+    
     def save_script(self, channel_name: str, content: str, session_id: str):
         """Save the full generated script to a channel's Google Drive folder."""
         filename = f"saved_scripts_{channel_name.lower()}.txt"
@@ -894,7 +962,7 @@ def main():
         
         # Admin controls
         if user_role == 'admin':
-            col1, col2, col3, col4, col5, col6 = st.columns([1, 1, 1, 1, 1, 1])
+            col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
             with col1:
                 if st.button("✏️ Edit Prompt"):
                     st.session_state.editing_prompt = selected_channel
@@ -923,6 +991,9 @@ def main():
             with col6:
                 if st.button("📝 Add Titles"):
                     st.session_state.add_titles_modal = selected_channel
+            with col7:
+                if st.button("🗑️ Delete Titles"):
+                    st.session_state.delete_titles_modal = selected_channel
         
         # Handle bulk add titles modal
         if 'add_titles_modal' in st.session_state and st.session_state.add_titles_modal == selected_channel:
@@ -990,6 +1061,75 @@ def main():
                     try:
                         current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=False)
                         st.write(f"**Current titles in {selected_channel}: {len(current_titles)}**")
+                    except Exception as e:
+                        st.write(f"**Current titles: Unable to load** ({str(e)})")
+        
+        # Handle delete titles modal
+        if 'delete_titles_modal' in st.session_state and st.session_state.delete_titles_modal == selected_channel:
+            st.markdown("---")
+            with st.expander("🗑️ **Delete Existing Titles**", expanded=True):
+                st.info("Enter titles to delete (one per line). Titles must match exactly.")
+                
+                # Text area for entering titles to delete
+                titles_to_delete_text = st.text_area(
+                    "Titles to delete:",
+                    placeholder="Enter titles here, one per line...\n\nExample:\nIn The Matrix (1999), Neo discovers the truth about reality\nIn Inception (2010), Dom Cobb must plant an idea",
+                    height=200,
+                    key="delete_titles_text"
+                )
+                
+                col1, col2, col3 = st.columns([1, 1, 2])
+                with col1:
+                    if st.button("🗑️ Delete Titles", type="primary"):
+                        if titles_to_delete_text.strip():
+                            titles_to_delete = [title.strip() for title in titles_to_delete_text.split('\n') if title.strip()]
+                            if titles_to_delete:
+                                try:
+                                    if hasattr(st.session_state.channel_manager, 'bulk_delete_titles'):
+                                        deleted_titles, not_found_titles = st.session_state.channel_manager.bulk_delete_titles(selected_channel, titles_to_delete)
+                                        
+                                        if deleted_titles:
+                                            st.success(f"✅ Deleted {len(deleted_titles)} titles:")
+                                            for title in deleted_titles:
+                                                st.write(f"- {title}")
+                                        
+                                        if not_found_titles:
+                                            st.warning(f"⚠️ {len(not_found_titles)} titles not found:")
+                                            for title in not_found_titles:
+                                                st.write(f"- {title}")
+                                        
+                                        # Force refresh title cache
+                                        st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                                        
+                                        # Clear the modal after successful deletion
+                                        if deleted_titles:
+                                            del st.session_state.delete_titles_modal
+                                            st.rerun()
+                                    else:
+                                        st.error("❌ Bulk delete titles functionality not available - please refresh the page")
+                                except Exception as e:
+                                    st.error(f"❌ Error deleting titles: {str(e)}")
+                            else:
+                                st.warning("Please enter at least one title")
+                        else:
+                            st.warning("Please enter some titles to delete")
+                
+                with col2:
+                    if st.button("❌ Cancel"):
+                        del st.session_state.delete_titles_modal
+                        st.rerun()
+                
+                with col3:
+                    # Show current title count
+                    try:
+                        current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=False)
+                        st.write(f"**Current titles in {selected_channel}: {len(current_titles)}**")
+                        if current_titles:
+                            st.write("**First few titles:**")
+                            for title in list(current_titles)[:3]:
+                                st.write(f"• {title}")
+                            if len(current_titles) > 3:
+                                st.write(f"... and {len(current_titles) - 3} more")
                     except Exception as e:
                         st.write(f"**Current titles: Unable to load** ({str(e)})")
         
