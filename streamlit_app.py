@@ -593,17 +593,29 @@ def extract_titles_from_response(content: str) -> List[str]:
     
     for line in lines:
         line = line.strip()
-        # Look for "TITLE:" format (case insensitive)
-        if line.upper().startswith('TITLE:'):
+        # Look for "TITLE:" or "TITLE" format (case insensitive)
+        line_upper = line.upper()
+        if line_upper.startswith('TITLE:'):
             # Extract everything after "TITLE:"
             title = line[6:].strip()  # Remove "TITLE:" and whitespace
+        elif line_upper.startswith('TITLE '):
+            # Extract everything after "TITLE "
+            title = line[6:].strip()  # Remove "TITLE " and whitespace
+        elif line_upper.startswith('TITLE') and len(line) > 5 and not line[5].isalpha():
+            # Handle "TITLE" followed by non-letter (like numbers, symbols)
+            title = line[5:].strip()
+        else:
+            continue
             
-            # Clean up the title
-            if title.endswith(' SHORT'):
-                title = title[:-6].strip()
-            
-            if title and len(title) > 5:  # Minimum length check
-                titles_found.append(title)
+        # Clean up the title
+        if title.endswith(' SHORT'):
+            title = title[:-6].strip()
+        
+        # Remove any leading numbers/dots/dashes (like "1. ", "- ", etc.)
+        title = re.sub(r'^[\d\-\.\s]+', '', title).strip()
+        
+        if title and len(title) > 5:  # Minimum length check
+            titles_found.append(title)
     
     return titles_found
 
@@ -1071,15 +1083,37 @@ def main():
                     full_prompt = base_prompt
                     
                     if used_titles:
+                        # Create comprehensive exclusion list
                         used_movies = set()
-                        for title in used_titles:
+                        used_titles_list = list(used_titles)
+                        
+                        # Extract movie names from various title formats
+                        for title in used_titles_list:
+                            # Pattern 1: "In Movie Name (Year)"
                             match = re.search(r'^In (.+?) \(\d{4}\)', title)
                             if match:
                                 used_movies.add(match.group(1))
+                            # Pattern 2: "Movie Name (Year)" (without "In")
+                            elif re.search(r'^([^(]+) \(\d{4}\)', title):
+                                match = re.search(r'^([^(]+) \(\d{4}\)', title)
+                                used_movies.add(match.group(1).strip())
+                            # Pattern 3: Any title containing recognizable movie patterns
+                            else:
+                                # Try to extract movie name from various formats
+                                clean_title = title.replace('In ', '').strip()
+                                if '(' in clean_title and ')' in clean_title:
+                                    movie_part = clean_title.split('(')[0].strip()
+                                    if len(movie_part) > 3:
+                                        used_movies.add(movie_part)
                         
+                        # Include more titles for better exclusion (up to 25 instead of 10)
                         if used_movies:
-                            exclusion_list = ", ".join(list(used_movies)[:10])
-                            full_prompt = f"DO NOT use any of these movies: {exclusion_list}. Pick something completely different. {base_prompt}"
+                            exclusion_list = ", ".join(list(used_movies)[:25])
+                            full_prompt = f"DO NOT use any of these movies/topics that have already been used: {exclusion_list}. Choose completely different and unique movies/topics. {base_prompt}"
+                        
+                        # Also add a general instruction to avoid duplicates
+                        if len(used_titles_list) > 0:
+                            full_prompt += f" IMPORTANT: You have already created {len(used_titles_list)} shorts for this channel. Make sure to choose completely different and unique content."
                     
                     if extra_prompt.strip():
                         full_prompt += " " + extra_prompt.strip()
