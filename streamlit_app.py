@@ -962,6 +962,7 @@ def main():
         
         # Admin controls
         if user_role == 'admin':
+            st.write(f"DEBUG: Admin controls visible. User role: {user_role}")  # Temporary debug
             col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
             with col1:
                 if st.button("✏️ Edit Prompt"):
@@ -992,7 +993,9 @@ def main():
                 if st.button("📝 Add Titles"):
                     st.session_state.add_titles_modal = selected_channel
             with col7:
+                st.write("DEBUG: Col7 rendering")  # Debug
                 if st.button("🗑️ Delete Titles"):
+                    st.write("DEBUG: Delete Titles button clicked!")  # Debug
                     st.session_state.delete_titles_modal = selected_channel
         
         # Handle bulk add titles modal
