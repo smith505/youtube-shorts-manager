@@ -1110,10 +1110,31 @@ def main():
                     if titles_list:
                         # Show processing indicator if deleting
                         processing_key = f"processing_delete_{selected_channel}"
+                        processing_start_key = f"processing_start_{selected_channel}"
                         is_processing = st.session_state.get(processing_key, False)
                         
                         if is_processing:
-                            st.warning("🔄 Processing deletion... Please wait")
+                            # Check if processing has been stuck for too long (more than 10 seconds)
+                            processing_start = st.session_state.get(processing_start_key, datetime.now())
+                            time_stuck = datetime.now() - processing_start
+                            
+                            if time_stuck.total_seconds() > 10:
+                                # Reset stuck processing
+                                st.session_state[processing_key] = False
+                                if processing_start_key in st.session_state:
+                                    del st.session_state[processing_start_key]
+                                st.error("⚠️ Processing timeout - reset automatically")
+                                st.rerun()
+                            else:
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    st.warning("🔄 Processing deletion... Please wait")
+                                with col2:
+                                    if st.button("🔧 Reset", help="Click if stuck"):
+                                        st.session_state[processing_key] = False
+                                        if processing_start_key in st.session_state:
+                                            del st.session_state[processing_start_key]
+                                        st.rerun()
                         
                         st.write(f"**{len(titles_list)} titles found (in file order):**")
                         
@@ -1134,8 +1155,10 @@ def main():
                                     is_processing = st.session_state.get(processing_key, False)
                                     
                                     if st.button("❌", key=button_key, help=f"Delete: {title}", disabled=is_processing):
-                                        # Set processing flag to prevent rapid clicks
+                                        # Set processing flag and start time to prevent rapid clicks
+                                        processing_start_key = f"processing_start_{selected_channel}"
                                         st.session_state[processing_key] = True
+                                        st.session_state[processing_start_key] = datetime.now()
                                         
                                         try:
                                             success, message = st.session_state.channel_manager.delete_title(selected_channel, title)
@@ -1150,19 +1173,22 @@ def main():
                                                 if ordered_cache_key in st.session_state:
                                                     del st.session_state[ordered_cache_key]
                                                 
-                                                # Clear processing flag
+                                                # Clear processing flag and start time
                                                 st.session_state[processing_key] = False
+                                                if processing_start_key in st.session_state:
+                                                    del st.session_state[processing_start_key]
                                                 
                                                 st.success(f"✅ Deleted: {title}")
-                                                # Short delay to prevent rapid clicking issues
-                                                import time
-                                                time.sleep(0.1)
                                                 st.rerun()
                                             else:
                                                 st.session_state[processing_key] = False
+                                                if processing_start_key in st.session_state:
+                                                    del st.session_state[processing_start_key]
                                                 st.error(f"❌ {message}")
                                         except Exception as e:
                                             st.session_state[processing_key] = False
+                                            if processing_start_key in st.session_state:
+                                                del st.session_state[processing_start_key]
                                             st.error(f"❌ Error deleting title: {str(e)}")
                                             import traceback
                                             st.error(f"Full error: {traceback.format_exc()}")
@@ -1180,10 +1206,13 @@ def main():
                 # Cancel button at the bottom
                 st.markdown("---")
                 if st.button("❌ Close", type="secondary"):
-                    # Clear processing flag when closing modal
+                    # Clear processing flags when closing modal
                     processing_key = f"processing_delete_{selected_channel}"
+                    processing_start_key = f"processing_start_{selected_channel}"
                     if processing_key in st.session_state:
                         del st.session_state[processing_key]
+                    if processing_start_key in st.session_state:
+                        del st.session_state[processing_start_key]
                     del st.session_state.delete_titles_modal
                     st.rerun()
         
