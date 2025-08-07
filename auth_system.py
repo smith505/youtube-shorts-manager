@@ -669,8 +669,31 @@ def show_login_page():
                 with col1:
                     if st.button("🔄 Sync Users to Google Drive", type="primary"):
                         try:
-                            # Get the drive manager from main session
+                            # Try to get existing drive manager first
                             drive_manager = st.session_state.get('drive_manager', None)
+                            
+                            # If no drive manager, create one specifically for user sync
+                            if not drive_manager or not hasattr(drive_manager, 'service') or not drive_manager.service:
+                                st.info("🔄 Initializing Google Drive connection...")
+                                
+                                # Import and create a new GoogleDriveManager
+                                import sys
+                                import os
+                                
+                                # Import GoogleDriveManager from streamlit_app
+                                try:
+                                    from streamlit_app import GoogleDriveManager
+                                    drive_manager = GoogleDriveManager()
+                                    
+                                    if drive_manager and hasattr(drive_manager, 'service') and drive_manager.service:
+                                        st.success("✅ Google Drive connected!")
+                                    else:
+                                        st.error("❌ Failed to connect to Google Drive")
+                                        drive_manager = None
+                                except Exception as import_error:
+                                    st.error(f"❌ Could not initialize Google Drive: {str(import_error)}")
+                                    drive_manager = None
+                            
                             if drive_manager and hasattr(drive_manager, 'service') and drive_manager.service:
                                 # Update the user manager's drive manager reference
                                 st.session_state.user_manager.drive_manager = drive_manager
@@ -682,13 +705,11 @@ def show_login_page():
                                 st.success("✅ User data synced to Google Drive!")
                                 st.info("Check your 'YouTube Shorts Manager' folder in Google Drive")
                             else:
-                                st.error("❌ Google Drive not available. Make sure you're logged in and Drive is connected.")
-                                if drive_manager:
-                                    st.error(f"Drive manager exists but service is: {getattr(drive_manager, 'service', 'missing')}")
-                                else:
-                                    st.error("Drive manager is None - you need to use a channel feature first to initialize Google Drive")
+                                st.error("❌ Could not establish Google Drive connection")
+                                
                         except Exception as e:
                             st.error(f"❌ Sync failed: {str(e)}")
+                            st.error("Please make sure your Google Drive credentials are properly configured.")
                 
                 with col2:
                     if st.button("📥 Load from Google Drive"):
