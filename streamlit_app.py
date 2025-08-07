@@ -1088,7 +1088,17 @@ def main():
                 
                 # Get current titles in the order they appear in the file
                 try:
-                    titles_list = st.session_state.channel_manager.get_used_titles_ordered(selected_channel, force_refresh=False)
+                    if hasattr(st.session_state.channel_manager, 'get_used_titles_ordered'):
+                        titles_list = st.session_state.channel_manager.get_used_titles_ordered(selected_channel, force_refresh=False)
+                    else:
+                        # Fallback: get titles directly from file to preserve order
+                        filename = f"titles_{selected_channel.lower()}.txt"
+                        channel_folder_id = st.session_state.channel_manager.drive_manager.get_or_create_channel_folder(selected_channel)
+                        content = st.session_state.channel_manager.drive_manager.read_file(filename, channel_folder_id)
+                        if content:
+                            titles_list = [line.strip() for line in content.split('\n') if line.strip()]
+                        else:
+                            titles_list = []
                     
                     if titles_list:
                         st.write(f"**{len(titles_list)} titles found (in file order):**")
