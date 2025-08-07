@@ -69,7 +69,6 @@ class GoogleDriveManager:
             # Try to get credentials from Streamlit secrets first
             if 'GOOGLE_CREDENTIALS' in st.secrets:
                 import json
-                from google.oauth2.credentials import Credentials
                 creds_info = json.loads(st.secrets['GOOGLE_CREDENTIALS'])
                 creds = Credentials.from_authorized_user_info(creds_info, self.SCOPES)
             
@@ -420,23 +419,29 @@ from auth_system import show_login_page, check_authentication, get_current_user
 def main():
     """Main Streamlit application."""
     
-    # Check authentication first
-    if not check_authentication():
-        show_login_page()
-        return
-    
-    # Get current user
-    current_user = get_current_user()
-    
-    # Initialize session state
-    if 'drive_manager' not in st.session_state:
-        try:
-            st.session_state.drive_manager = GoogleDriveManager()
-            st.session_state.claude_client = ClaudeClient()
-            st.session_state.channel_manager = ChannelManager(st.session_state.drive_manager)
-        except Exception as e:
-            st.error(f"Failed to initialize: {str(e)}")
+    try:
+        # Check authentication first
+        if not check_authentication():
+            show_login_page()
             return
+        
+        # Get current user
+        current_user = get_current_user()
+        
+        # Initialize session state
+        if 'drive_manager' not in st.session_state:
+            try:
+                st.session_state.claude_client = ClaudeClient()
+                st.session_state.drive_manager = GoogleDriveManager()
+                st.session_state.channel_manager = ChannelManager(st.session_state.drive_manager)
+            except Exception as e:
+                st.error(f"Failed to initialize services: {str(e)}")
+                st.info("Please check if all secrets are configured correctly.")
+                return
+    
+    except Exception as e:
+        st.error(f"Application error: {str(e)}")
+        return
     
     st.title("🎬 YouTube Shorts Manager")
     st.markdown(f"Welcome back, **{current_user['first_name']}**! Generate YouTube Shorts scripts with AI and manage multiple channels")
