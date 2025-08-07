@@ -334,10 +334,22 @@ class ClaudeClient:
             
             if response.status_code == 200:
                 data = response.json()
+                
+                # Extract token usage if available
+                usage = data.get("usage", {})
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+                total_tokens = input_tokens + output_tokens
+                
                 return {
                     "success": True,
                     "content": data["content"][0]["text"],
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "token_usage": {
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "total_tokens": total_tokens
+                    }
                 }
             else:
                 return {
@@ -1168,6 +1180,10 @@ def main():
                                 st.write(f"**Total existing titles:** {len(used_titles)}")
                                 st.write(f"**Unique movies extracted:** {len(used_movies) if 'used_movies' in locals() else 'N/A'}")
                                 st.write(f"**Franchises detected:** {len(used_franchises) if 'used_franchises' in locals() else 'N/A'}")
+                            # Calculate and show prompt size
+                            prompt_length = len(full_prompt)
+                            estimated_tokens = prompt_length / 4  # Rough estimate: 1 token ≈ 4 characters
+                            st.write(f"**Prompt length:** {prompt_length} characters (≈{int(estimated_tokens)} tokens)")
                     
                     # Generate script
                     session_id = str(uuid.uuid4())
@@ -1213,6 +1229,45 @@ def main():
                             
                             # Add copy button hint
                             st.info("💡 **Tip:** Click inside the text area above, then use Ctrl+A to select all and Ctrl+C to copy the entire script.")
+                        
+                        # Display token usage for admins
+                        if user_role == 'admin' and 'token_usage' in result:
+                            token_info = result['token_usage']
+                            
+                            # Track cumulative token usage in session
+                            if 'total_session_tokens' not in st.session_state:
+                                st.session_state.total_session_tokens = 0
+                                st.session_state.total_session_cost = 0.0
+                            
+                            st.session_state.total_session_tokens += token_info['total_tokens']
+                            
+                            with st.expander("📊 **Token Usage Stats** (Admin Only)", expanded=False):
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Input Tokens", f"{token_info['input_tokens']:,}")
+                                with col2:
+                                    st.metric("Output Tokens", f"{token_info['output_tokens']:,}")
+                                with col3:
+                                    st.metric("Total Tokens", f"{token_info['total_tokens']:,}")
+                                
+                                # Cost estimation (based on Claude Sonnet pricing)
+                                # Prices as of 2024: $3 per million input tokens, $15 per million output tokens
+                                input_cost = (token_info['input_tokens'] / 1_000_000) * 3.00
+                                output_cost = (token_info['output_tokens'] / 1_000_000) * 15.00
+                                total_cost = input_cost + output_cost
+                                
+                                st.session_state.total_session_cost += total_cost
+                                
+                                st.write("---")
+                                st.write("**💰 Cost Estimation (This Generation):**")
+                                st.write(f"Input cost: ${input_cost:.4f}")
+                                st.write(f"Output cost: ${output_cost:.4f}")
+                                st.write(f"**Total cost: ${total_cost:.4f}**")
+                                
+                                st.write("---")
+                                st.write("**📈 Session Totals:**")
+                                st.write(f"Total tokens this session: {st.session_state.total_session_tokens:,}")
+                                st.write(f"**Total cost this session: ${st.session_state.total_session_cost:.4f}**")
                         
                         st.info(f"Session ID: {session_id}")
                         
