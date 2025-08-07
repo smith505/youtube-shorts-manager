@@ -456,6 +456,43 @@ class ChannelManager:
         except Exception as e:
             st.error(f"Failed to save title for {channel_name} to Google Drive: {str(e)}")
     
+    def bulk_add_titles(self, channel_name: str, titles_list: list):
+        """Bulk add multiple titles to a channel's Google Drive folder."""
+        if not titles_list:
+            return 0, 0
+            
+        filename = f"titles_{channel_name.lower()}.txt"
+        try:
+            # Get existing titles to avoid duplicates
+            existing_titles = self.get_used_titles(channel_name)
+            
+            # Filter out duplicates and empty titles
+            new_titles = []
+            duplicate_count = 0
+            
+            for title in titles_list:
+                title = title.strip()
+                if title:  # Not empty
+                    if title in existing_titles:
+                        duplicate_count += 1
+                    else:
+                        new_titles.append(title)
+                        existing_titles.add(title)  # Add to set to catch duplicates within the list
+            
+            if new_titles:
+                # Get or create the channel folder
+                channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+                
+                # Add all new titles at once
+                titles_content = "\n".join(new_titles) + "\n"
+                self.drive_manager.append_to_file(filename, titles_content, channel_folder_id)
+                
+            return len(new_titles), duplicate_count
+            
+        except Exception as e:
+            st.error(f"Failed to bulk add titles for {channel_name} to Google Drive: {str(e)}")
+            return 0, 0
+    
     def save_script(self, channel_name: str, content: str, session_id: str):
         """Save the full generated script to a channel's Google Drive folder."""
         filename = f"saved_scripts_{channel_name.lower()}.txt"
@@ -773,7 +810,7 @@ def main():
         
         # Admin controls
         if user_role == 'admin':
-            col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1])
+            col1, col2, col3, col4, col5, col6 = st.columns([1, 1, 1, 1, 1, 1])
             with col1:
                 if st.button("✏️ Edit Prompt"):
                     st.session_state.editing_prompt = selected_channel
@@ -799,6 +836,78 @@ def main():
             with col5:
                 if st.button("❌ Delete Channel"):
                     st.session_state.delete_channel_confirm = selected_channel
+            with col6:
+                if st.button("📝 Add Titles"):
+                    st.session_state.add_titles_modal = selected_channel
+        
+        # Handle bulk add titles modal
+        if 'add_titles_modal' in st.session_state and st.session_state.add_titles_modal == selected_channel:
+            st.markdown("---")
+            with st.expander("📝 **Add Existing Titles**", expanded=True):
+                st.info(f"Add existing titles to **{selected_channel}** to prevent duplicates in future generations.")
+                
+                st.markdown("**Instructions:**")
+                st.write("• Enter one title per line")
+                st.write("• Titles will be checked for duplicates automatically") 
+                st.write("• Empty lines will be ignored")
+                
+                # Text area for bulk title input
+                bulk_titles_input = st.text_area(
+                    "Enter titles (one per line):",
+                    height=200,
+                    placeholder="In The Dark Knight (2008)\nIn Avengers: Endgame (2019)\nIn The Matrix (1999)\n...",
+                    key="bulk_titles_textarea"
+                )
+                
+                col1, col2, col3 = st.columns([1, 1, 2])
+                
+                with col1:
+                    if st.button("➕ Add Titles", type="primary"):
+                        if bulk_titles_input.strip():
+                            # Split by lines and clean up
+                            titles_list = [line.strip() for line in bulk_titles_input.split('\n') if line.strip()]
+                            
+                            if titles_list:
+                                try:
+                                    if hasattr(st.session_state.channel_manager, 'bulk_add_titles'):
+                                        added_count, duplicate_count = st.session_state.channel_manager.bulk_add_titles(
+                                            selected_channel, titles_list
+                                        )
+                                        
+                                        if added_count > 0:
+                                            st.success(f"✅ Added {added_count} new titles to {selected_channel}")
+                                        
+                                        if duplicate_count > 0:
+                                            st.info(f"ℹ️ Skipped {duplicate_count} duplicate titles")
+                                        
+                                        if added_count == 0 and duplicate_count == 0:
+                                            st.warning("No valid titles found to add")
+                                        
+                                        # Clear the modal after successful addition
+                                        if added_count > 0:
+                                            del st.session_state.add_titles_modal
+                                            st.rerun()
+                                    else:
+                                        st.error("❌ Bulk add titles functionality not available - please refresh the page")
+                                except Exception as e:
+                                    st.error(f"❌ Error adding titles: {str(e)}")
+                            else:
+                                st.warning("Please enter at least one title")
+                        else:
+                            st.warning("Please enter some titles to add")
+                
+                with col2:
+                    if st.button("❌ Cancel"):
+                        del st.session_state.add_titles_modal
+                        st.rerun()
+                
+                with col3:
+                    # Show current title count
+                    try:
+                        current_titles = st.session_state.channel_manager.get_used_titles(selected_channel)
+                        st.write(f"**Current titles in {selected_channel}: {len(current_titles)}**")
+                    except:
+                        st.write("**Current titles: Unable to load**")
         
         # Handle channel deletion confirmation
         if 'delete_channel_confirm' in st.session_state and st.session_state.delete_channel_confirm == selected_channel:
