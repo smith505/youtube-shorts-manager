@@ -457,162 +457,116 @@ def show_login_page():
         st.subheader("Login to Your Account")
         
         # Load saved credentials from computer-specific file
-        def get_browser_identifier():
-            """Get a persistent browser identifier using Streamlit runtime info."""
-            try:
-                # Use streamlit runtime context to get browser info
-                from streamlit.runtime.scriptrunner import get_script_run_ctx
-                from streamlit.runtime import get_instance
-                
-                ctx = get_script_run_ctx()
-                if ctx and ctx.session_id:
-                    # Use the session's browser info to create a persistent ID
-                    import hashlib
-                    
-                    # Get runtime instance for additional info
-                    runtime = get_instance()
-                    session = runtime._session_mgr.get_session_info(ctx.session_id)
-                    
-                    if session:
-                        # Create hash from browser/connection info that persists across sessions
-                        browser_info = f"{session.session.browser_info.user_agent if hasattr(session.session, 'browser_info') else 'unknown'}"
-                        client_info = f"{getattr(session.session, 'client_state', 'unknown')}"
-                        
-                        # Create a more persistent identifier
-                        persistent_id = hashlib.md5(f"{browser_info}-{client_info}".encode()).hexdigest()[:12]
-                        print(f"DEBUG: Using runtime browser ID: {persistent_id}")
-                        return persistent_id
-            except Exception as e:
-                print(f"DEBUG: Runtime context failed: {e}")
-            
-            # Fallback: create a simple time-based ID stored in a local file
-            browser_id_file = '.browser_id.txt'
-            try:
-                if os.path.exists(browser_id_file):
-                    with open(browser_id_file, 'r') as f:
-                        browser_id = f.read().strip()
-                        print(f"DEBUG: Using saved browser ID: {browser_id}")
-                        return browser_id
-                else:
-                    import uuid
-                    browser_id = f"browser_{uuid.uuid4().hex[:8]}"
-                    with open(browser_id_file, 'w') as f:
-                        f.write(browser_id)
-                    print(f"DEBUG: Created new browser ID: {browser_id}")
-                    return browser_id
-            except Exception as e:
-                print(f"DEBUG: Fallback browser ID failed: {e}")
-                
-            # Final fallback
-            print("DEBUG: Using default browser ID")
-            return "default_browser"
-        
-        def load_saved_credentials():
-            """Load saved credentials from browser-specific file."""
-            try:
-                browser_id = get_browser_identifier()
-                filename = f'.remember_me_{browser_id}.json'
-                
-                if os.path.exists(filename):
-                    with open(filename, 'r') as f:
-                        return json.load(f)
-                return {"email": "", "password": "", "remember": False}
-            except:
-                return {"email": "", "password": "", "remember": False}
-        
-        def save_credentials(email, password, remember):
-            """Save credentials to browser-specific file."""
-            try:
-                browser_id = get_browser_identifier()
-                filename = f'.remember_me_{browser_id}.json'
-                
-                # Debug output
-                print(f"DEBUG save_credentials: remember={remember}, browser_id={browser_id}, filename={filename}")
-                
-                if remember:
-                    data = {"email": email, "password": password, "remember": True}
-                    with open(filename, 'w') as f:
-                        json.dump(data, f)
-                    print(f"DEBUG: Saved credentials to {filename}")
-                    
-                    # Verify file was created
-                    if os.path.exists(filename):
-                        print(f"DEBUG: File {filename} exists after saving")
-                    else:
-                        print(f"DEBUG: ERROR - File {filename} NOT found after saving")
-                else:
-                    # Clear saved credentials
-                    if os.path.exists(filename):
-                        os.remove(filename)
-                        print(f"DEBUG: Removed credentials file {filename}")
-            except Exception as e:
-                print(f"DEBUG: Exception in save_credentials: {e}")
-        
-        # Clean up old file-based remember me files
+        # Clean up all old remember me files 
         def cleanup_old_files():
             import glob
             try:
-                # Remove old remember me files
+                # Remove all old remember me files
                 for file in glob.glob('.remember_me*.json'):
                     os.remove(file)
                 for file in glob.glob('.computer_id_override.txt'):
                     os.remove(file)
+                for file in glob.glob('.browser_id.txt'):
+                    os.remove(file)
             except:
                 pass
         
-        # Clean up old files on first load
+        # Clean up old files
         cleanup_old_files()
         
-        # Load saved credentials from browser session
-        saved_creds = load_saved_credentials()
-        saved_email = saved_creds.get("email", "")
-        saved_password = saved_creds.get("password", "")
-        saved_remember = saved_creds.get("remember", False)
+        # No need to load saved credentials - let Chrome handle it
+        saved_email = ""
+        saved_password = ""
+        saved_remember = False
         
-        # Debug info
-        if st.checkbox("🔍 Show browser debug info", key="show_debug_remember"):
-            browser_id = get_browser_identifier()
-            st.code(f"Browser ID: {browser_id}")
-            st.code(f"Remember me file: .remember_me_{browser_id}.json")
-            st.info("💡 Remember me now works per browser instance (persistent across page refreshes)")
-            if saved_email:
-                st.success(f"Found saved credentials for: {saved_email}")
-            else:
-                st.info("No saved credentials found for this browser")
+        # Use HTML form for proper Chrome password manager integration
+        login_form_html = """
+        <form method="post" action="#" autocomplete="on" id="login-form">
+            <div style="margin-bottom: 1rem;">
+                <label for="email" style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Email:</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    name="email"
+                    autocomplete="username"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 1rem;"
+                    placeholder="Enter your email"
+                />
+            </div>
             
-            # Show file info
-            filename = f'.remember_me_{browser_id}.json'
-            if os.path.exists(filename):
-                st.write("✅ Remember me file exists")
-                if st.button("🗑️ Clear Saved Credentials", key="clear_credentials"):
-                    os.remove(filename)
-                    st.success("✅ Saved credentials cleared")
-                    st.info("🔄 Please refresh the page")
-            else:
-                st.write("❌ No remember me file found")
+            <div style="margin-bottom: 1rem;">
+                <label for="password" style="display: block; margin-bottom: 0.25rem; font-weight: 600;">Password:</label>
+                <input 
+                    type="password" 
+                    id="password" 
+                    name="password"
+                    autocomplete="current-password"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 1rem;"
+                    placeholder="Enter your password"
+                />
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" id="remember" name="remember" style="margin-right: 0.5rem;"/>
+                    <span>Remember me</span>
+                </label>
+            </div>
+            
+            <button 
+                type="submit" 
+                style="width: 100%; padding: 0.75rem; background-color: #2563eb; color: white; border: none; border-radius: 0.375rem; font-size: 1rem; font-weight: 600; cursor: pointer;"
+                onmouseover="this.style.backgroundColor='#1d4ed8'"
+                onmouseout="this.style.backgroundColor='#2563eb'"
+            >
+                🔑 Login
+            </button>
+        </form>
         
-        with st.form("login_form"):
-            email = st.text_input("Email:", value=saved_email, key="login_email")
-            password = st.text_input("Password:", type="password", value=saved_password, key="login_password")
-            remember_me = st.checkbox("Remember me", value=saved_remember, key="remember_me", 
-                                    help="Keep me logged in on this browser")
-            login_button = st.form_submit_button("🔑 Login", type="primary")
+        <script>
+            document.getElementById('login-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const remember = document.getElementById('remember').checked;
+                
+                // Send data to Streamlit via query parameters
+                const params = new URLSearchParams(window.location.search);
+                params.set('login_email', email);
+                params.set('login_password', password);
+                params.set('login_remember', remember ? 'true' : 'false');
+                params.set('login_submit', 'true');
+                
+                // Reload page with login data
+                window.location.search = params.toString();
+            });
+        </script>
+        """
+        
+        st.components.v1.html(login_form_html, height=300)
+        
+        # Check for login submission via query parameters
+        query_params = st.query_params
+        if query_params.get('login_submit') == 'true':
+            email = query_params.get('login_email', '')
+            password = query_params.get('login_password', '')
+            remember_me = query_params.get('login_remember', 'false') == 'true'
             
-            if login_button:
-                if email and password:
-                    result = st.session_state.user_manager.login_user(email, password)
-                    if result["success"]:
-                        # Save credentials to file if remember me is checked
-                        save_credentials(email, password, remember_me)
-                        
-                        st.session_state.authenticated = True
-                        st.session_state.user = result["user"]
-                        st.success(f"Welcome back, {result['user']['first_name']}!")
-                        st.rerun()
-                    else:
-                        st.error(result["error"])
+            # Clear query parameters
+            st.query_params.clear()
+            
+            if email and password:
+                result = st.session_state.user_manager.login_user(email, password)
+                if result["success"]:
+                    st.session_state.authenticated = True
+                    st.session_state.user = result["user"]
+                    st.success(f"Welcome back, {result['user']['first_name']}!")
+                    st.rerun()
                 else:
-                    st.error("Please enter both email and password")
+                    st.error(result["error"])
+            else:
+                st.error("Please enter both email and password")
         
         # Forgot Password button
         if st.button("🔒 Forgot Password?"):
