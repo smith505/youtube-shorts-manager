@@ -648,6 +648,47 @@ def show_login_page():
             with debug_tab:
                 st.subheader("🔧 Debug & User Management")
                 
+                # Google Drive Sync Section
+                st.write("**☁️ Google Drive Sync:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🔄 Sync Users to Google Drive", type="primary"):
+                        try:
+                            # Get the drive manager from main session
+                            drive_manager = st.session_state.get('drive_manager', None)
+                            if drive_manager and hasattr(drive_manager, 'service') and drive_manager.service:
+                                # Update the user manager's drive manager reference
+                                st.session_state.user_manager.drive_manager = drive_manager
+                                
+                                # Force sync users and pending
+                                st.session_state.user_manager.save_users()
+                                st.session_state.user_manager.save_pending()
+                                
+                                st.success("✅ User data synced to Google Drive!")
+                                st.info("Check your 'YouTube Shorts Manager' folder in Google Drive")
+                            else:
+                                st.error("❌ Google Drive not available. Make sure you're logged in and Drive is connected.")
+                        except Exception as e:
+                            st.error(f"❌ Sync failed: {str(e)}")
+                
+                with col2:
+                    if st.button("📥 Load from Google Drive"):
+                        try:
+                            drive_manager = st.session_state.get('drive_manager', None)
+                            if drive_manager and hasattr(drive_manager, 'service') and drive_manager.service:
+                                # Update the user manager's drive manager reference
+                                st.session_state.user_manager.drive_manager = drive_manager
+                                # Reload users from Drive
+                                st.session_state.user_manager.load_users()
+                                st.success("✅ User data loaded from Google Drive!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Google Drive not available.")
+                        except Exception as e:
+                            st.error(f"❌ Load failed: {str(e)}")
+                
+                st.markdown("---")
+                
                 # Show raw user data
                 st.write("**📊 System Status:**")
                 col1, col2 = st.columns(2)
