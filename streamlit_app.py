@@ -1136,10 +1136,32 @@ def main():
                         st.write(f"- File: {filename}")
                         st.write(f"- Channel folder: {channel_folder_id}")
                         st.write(f"- Content length: {len(content) if content else 0}")
+                        
+                        # List all files in the channel folder
+                        try:
+                            drive_service = st.session_state.channel_manager.drive_manager.service
+                            folder_files = drive_service.files().list(
+                                q=f"parents='{channel_folder_id}' and trashed=false",
+                                fields="files(id, name, size, modifiedTime)"
+                            ).execute()
+                            
+                            st.write(f"**All files in {selected_channel} folder:**")
+                            for file in folder_files.get('files', []):
+                                st.write(f"  • {file['name']} (Size: {file.get('size', 'N/A')} bytes, Modified: {file.get('modifiedTime', 'N/A')})")
+                                
+                        except Exception as e:
+                            st.write(f"- Error listing folder files: {str(e)}")
+                        
                         if content:
                             st.text_area("Raw file content:", content, height=200, disabled=True)
                         else:
                             st.write("- Raw content: (empty)")
+                            st.error("🚨 **The app is reading an empty file, but you say there's content in Google Drive**")
+                            st.write("**This suggests:**")
+                            st.write("• Wrong file is being read")
+                            st.write("• File permissions issue")
+                            st.write("• Google Drive API cache issue")
+                            st.write("• File is in wrong folder location")
                     
                     if content and content.strip():
                         titles_list = [line.strip() for line in content.split('\n') if line.strip()]
