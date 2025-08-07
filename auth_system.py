@@ -13,43 +13,84 @@ import uuid
 import re
 
 class UserManager:
-    def __init__(self):
+    def __init__(self, drive_manager=None):
         self.users_file = "users.json"
-        self.pending_file = "pending_users.json"
+        self.pending_file = "pending_users.json" 
         self.admin_email = "corysmth14@gmail.com"
+        self.drive_manager = drive_manager
         self.load_users()
         
     def load_users(self):
-        """Load approved and pending users from files."""
+        """Load approved and pending users from files and Google Drive."""
+        # Try to load from Google Drive first (for persistence across deployments)
+        self.users = {}
+        self.pending = {}
+        
         # Load approved users
         try:
-            if os.path.exists(self.users_file):
+            # Try Google Drive first
+            if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
+                drive_content = self.drive_manager.read_file(self.users_file)
+                if drive_content.strip():
+                    self.users = json.loads(drive_content)
+            
+            # Fallback to local file
+            if not self.users and os.path.exists(self.users_file):
                 with open(self.users_file, 'r') as f:
                     self.users = json.load(f)
-            else:
-                self.users = {}
-        except:
+                    # If we loaded from local but have Drive access, sync to Drive
+                    if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
+                        self.save_users()
+        except Exception as e:
+            print(f"Error loading users: {str(e)}")
             self.users = {}
             
         # Load pending users
         try:
-            if os.path.exists(self.pending_file):
+            # Try Google Drive first
+            if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
+                drive_content = self.drive_manager.read_file(self.pending_file)
+                if drive_content.strip():
+                    self.pending = json.loads(drive_content)
+            
+            # Fallback to local file
+            if not self.pending and os.path.exists(self.pending_file):
                 with open(self.pending_file, 'r') as f:
                     self.pending = json.load(f)
-            else:
-                self.pending = {}
-        except:
+                    # If we loaded from local but have Drive access, sync to Drive
+                    if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
+                        self.save_pending()
+        except Exception as e:
+            print(f"Error loading pending users: {str(e)}")
             self.pending = {}
     
     def save_users(self):
-        """Save approved users to file."""
-        with open(self.users_file, 'w') as f:
-            json.dump(self.users, f, indent=2, default=str)
+        """Save approved users to file and Google Drive."""
+        try:
+            # Save to local file
+            with open(self.users_file, 'w') as f:
+                json.dump(self.users, f, indent=2, default=str)
+            
+            # Also save to Google Drive for persistence
+            if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
+                content = json.dumps(self.users, indent=2, default=str)
+                self.drive_manager.write_file(self.users_file, content)
+        except Exception as e:
+            print(f"Error saving users: {str(e)}")
     
     def save_pending(self):
-        """Save pending users to file."""
-        with open(self.pending_file, 'w') as f:
-            json.dump(self.pending, f, indent=2, default=str)
+        """Save pending users to file and Google Drive."""
+        try:
+            # Save to local file
+            with open(self.pending_file, 'w') as f:
+                json.dump(self.pending, f, indent=2, default=str)
+            
+            # Also save to Google Drive for persistence
+            if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
+                content = json.dumps(self.pending, indent=2, default=str)
+                self.drive_manager.write_file(self.pending_file, content)
+        except Exception as e:
+            print(f"Error saving pending users: {str(e)}")
     
     def hash_password(self, password: str) -> str:
         """Hash a password using bcrypt."""
@@ -332,7 +373,9 @@ def show_login_page():
     
     # Initialize user manager
     if 'user_manager' not in st.session_state:
-        st.session_state.user_manager = UserManager()
+        # Try to get drive_manager from session state if available
+        drive_manager = st.session_state.get('drive_manager', None)
+        st.session_state.user_manager = UserManager(drive_manager)
     
     # Handle URL parameters for approval/rejection
     query_params = st.query_params
