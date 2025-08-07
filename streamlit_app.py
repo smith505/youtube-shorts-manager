@@ -619,7 +619,7 @@ def main():
     st.title("🎬 YouTube Shorts Manager")
     user_role = current_user.get('role', 'default')
     st.markdown(f"Welcome back, **{current_user['first_name']}**! Role: **{user_role.upper()}**")
-    # Force redeploy - backup method fix
+    # App version: 2.1 - delete channel fix
     
     # Logout button in top right
     col1, col2 = st.columns([4, 1])
@@ -814,14 +814,20 @@ def main():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("❌ Yes, Remove Channel", type="primary", disabled=not confirm_delete):
-                        if st.session_state.channel_manager.delete_channel(selected_channel):
-                            st.success(f"✅ Channel '{selected_channel}' removed from dropdown")
-                            # Clear the confirmation state and force refresh
-                            del st.session_state.delete_channel_confirm
-                            time.sleep(1)  # Brief pause for user to see success message
-                            st.rerun()
-                        else:
-                            st.error(f"❌ Failed to delete channel '{selected_channel}'")
+                        try:
+                            if hasattr(st.session_state.channel_manager, 'delete_channel'):
+                                if st.session_state.channel_manager.delete_channel(selected_channel):
+                                    st.success(f"✅ Channel '{selected_channel}' removed from dropdown")
+                                    # Clear the confirmation state and force refresh
+                                    del st.session_state.delete_channel_confirm
+                                    time.sleep(1)  # Brief pause for user to see success message
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Failed to delete channel '{selected_channel}'")
+                            else:
+                                st.error("❌ Delete channel functionality not available - please refresh the page")
+                        except Exception as e:
+                            st.error(f"❌ Delete channel error: {str(e)}")
                 
                 with col2:
                     if st.button("🔄 Cancel", key="cancel_delete_channel"):
