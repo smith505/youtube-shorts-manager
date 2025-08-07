@@ -415,6 +415,36 @@ class ChannelManager:
         except Exception as e:
             st.error(f"Failed to save script for {channel_name} to Google Drive: {str(e)}")
     
+    def clear_titles(self, channel_name: str):
+        """Clear all titles for a channel."""
+        try:
+            if not self.drive_manager or not hasattr(self.drive_manager, 'get_or_create_channel_folder'):
+                st.warning("Google Drive not available")
+                return False
+                
+            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            filename = f"titles_{channel_name.lower()}.txt"
+            self.drive_manager.write_file(filename, "", channel_folder_id)
+            return True
+        except Exception as e:
+            st.error(f"Failed to clear titles: {str(e)}")
+            return False
+    
+    def clear_scripts(self, channel_name: str):
+        """Clear all scripts for a channel."""
+        try:
+            if not self.drive_manager or not hasattr(self.drive_manager, 'get_or_create_channel_folder'):
+                st.warning("Google Drive not available")
+                return False
+                
+            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            filename = f"saved_scripts_{channel_name.lower()}.txt"
+            self.drive_manager.write_file(filename, "", channel_folder_id)
+            return True
+        except Exception as e:
+            st.error(f"Failed to clear scripts: {str(e)}")
+            return False
+    
     def backup_channel_files(self, channel_name: str):
         """Create backup of channel files (titles and scripts)."""
         try:
@@ -458,36 +488,6 @@ class ChannelManager:
             return False
         except Exception as e:
             st.error(f"Failed to backup {channel_name}: {str(e)}")
-            return False
-    
-    def clear_titles(self, channel_name: str):
-        """Clear all titles for a channel."""
-        try:
-            if not self.drive_manager or not hasattr(self.drive_manager, 'get_or_create_channel_folder'):
-                st.warning("Google Drive not available")
-                return False
-                
-            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
-            filename = f"titles_{channel_name.lower()}.txt"
-            self.drive_manager.write_file(filename, "", channel_folder_id)
-            return True
-        except Exception as e:
-            st.error(f"Failed to clear titles: {str(e)}")
-            return False
-    
-    def clear_scripts(self, channel_name: str):
-        """Clear all scripts for a channel."""
-        try:
-            if not self.drive_manager or not hasattr(self.drive_manager, 'get_or_create_channel_folder'):
-                st.warning("Google Drive not available")
-                return False
-                
-            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
-            filename = f"saved_scripts_{channel_name.lower()}.txt"
-            self.drive_manager.write_file(filename, "", channel_folder_id)
-            return True
-        except Exception as e:
-            st.error(f"Failed to clear scripts: {str(e)}")
             return False
 
 
