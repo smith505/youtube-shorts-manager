@@ -321,9 +321,15 @@ class ChannelManager:
         try:
             content = self.drive_manager.read_file(self.channels_file)
             if content:
-                return json.loads(content)
-        except (json.JSONDecodeError, Exception) as e:
-            pass
+                channels = json.loads(content)
+                st.info(f"🔍 DEBUG: Loaded {len(channels)} channels from Google Drive: {list(channels.keys())}")
+                return channels
+            else:
+                st.warning("🔍 DEBUG: channels.json file is empty or doesn't exist in Google Drive")
+        except json.JSONDecodeError as e:
+            st.error(f"🔍 DEBUG: JSON decode error in channels.json: {str(e)}")
+        except Exception as e:
+            st.error(f"🔍 DEBUG: Error loading channels: {str(e)}")
         return {}
     
     def save_channels(self):
@@ -463,6 +469,14 @@ def main():
         # Refresh channels
         if st.button("🔄 Refresh Channels"):
             st.session_state.channel_manager.channels = st.session_state.channel_manager.load_channels()
+            st.rerun()
+        
+        # Upload local channels button (for debugging)
+        if st.button("📤 Upload Local Channels"):
+            local_channels = {"Swipecore": "You are a ScrollCore-style YouTube Shorts scriptwriter...", "Starwars": "You are a ScrollCore-style YouTube Shorts scriptwriter for Star Wars..."}
+            for name, prompt in local_channels.items():
+                st.session_state.channel_manager.add_channel(name, prompt)
+            st.success("Uploaded sample channels to Google Drive!")
             st.rerun()
         
         # Channel selector
