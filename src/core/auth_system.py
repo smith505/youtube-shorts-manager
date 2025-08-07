@@ -458,7 +458,7 @@ def show_login_page():
         
         # Load saved credentials from computer-specific file
         def get_computer_id():
-            """Generate a unique identifier for this computer."""
+            """Generate a unique identifier for this computer and location."""
             import platform
             import hashlib
             
@@ -469,6 +469,12 @@ def show_login_page():
             try:
                 import getpass
                 system_info += f"-{getpass.getuser()}"
+            except:
+                pass
+            
+            # Add current working directory to make it location-specific too
+            try:
+                system_info += f"-{os.getcwd()}"
             except:
                 pass
                 
@@ -524,6 +530,15 @@ def show_login_page():
         saved_email = saved_creds.get("email", "")
         saved_password = saved_creds.get("password", "")
         saved_remember = saved_creds.get("remember", False)
+        
+        # Debug info (remove in production)
+        if st.checkbox("🔍 Show debug info", key="show_debug_remember"):
+            computer_id = get_computer_id()
+            st.code(f"Computer ID: {computer_id}")
+            st.code(f"Remember me file: .remember_me_{computer_id}.json")
+            st.code(f"Working directory: {os.getcwd()}")
+            if saved_email:
+                st.success(f"Found saved credentials for: {saved_email}")
         
         with st.form("login_form"):
             email = st.text_input("Email:", value=saved_email, key="login_email")
