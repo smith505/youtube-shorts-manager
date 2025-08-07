@@ -424,6 +424,14 @@ class ChannelManager:
             return True
         return False
     
+    def delete_channel(self, name: str):
+        """Delete a channel from the dropdown (removes from channels.json only)."""
+        if name in self.channels:
+            del self.channels[name]
+            self.save_channels()
+            return True
+        return False
+    
     def get_used_titles(self, channel_name: str) -> Set[str]:
         """Load used titles for a channel from Google Drive channel folder."""
         filename = f"titles_{channel_name.lower()}.txt"
@@ -765,7 +773,7 @@ def main():
         
         # Admin controls
         if user_role == 'admin':
-            col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+            col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1])
             with col1:
                 if st.button("✏️ Edit Prompt"):
                     st.session_state.editing_prompt = selected_channel
@@ -788,6 +796,37 @@ def main():
                             st.error("Channel manager not available")
                     except Exception as e:
                         st.error(f"Backup error: {str(e)}")
+            with col5:
+                if st.button("❌ Delete Channel"):
+                    st.session_state.delete_channel_confirm = selected_channel
+        
+        # Handle channel deletion confirmation
+        if 'delete_channel_confirm' in st.session_state and st.session_state.delete_channel_confirm == selected_channel:
+            st.markdown("---")
+            with st.expander("⚠️ **CONFIRM: Delete Channel**", expanded=True):
+                st.error(f"**WARNING:** This will remove **{selected_channel}** from the dropdown!")
+                st.info("📋 **What this does:**\n• Removes channel from the selection dropdown\n• Does NOT delete Google Drive files or data\n• Channel data remains safe in Google Drive")
+                st.warning("You can re-add the channel later by creating it again with the same name")
+                
+                # Confirmation checkbox
+                confirm_delete = st.checkbox(f"I want to remove {selected_channel} from the dropdown", key="confirm_channel_delete")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("❌ Yes, Remove Channel", type="primary", disabled=not confirm_delete):
+                        if st.session_state.channel_manager.delete_channel(selected_channel):
+                            st.success(f"✅ Channel '{selected_channel}' removed from dropdown")
+                            # Clear the confirmation state and force refresh
+                            del st.session_state.delete_channel_confirm
+                            time.sleep(1)  # Brief pause for user to see success message
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Failed to delete channel '{selected_channel}'")
+                
+                with col2:
+                    if st.button("🔄 Cancel", key="cancel_delete_channel"):
+                        del st.session_state.delete_channel_confirm
+                        st.rerun()
         
         # Handle prompt editing (no password needed for admins)
         if 'editing_prompt' in st.session_state and st.session_state.editing_prompt == selected_channel:
