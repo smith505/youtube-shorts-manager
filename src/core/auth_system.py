@@ -457,38 +457,80 @@ def show_login_page():
         st.subheader("Login to Your Account")
         
         # Load saved credentials from computer-specific file
-        def get_browser_session_id():
-            """Generate a unique identifier for this browser session."""
-            # Use Streamlit's session state to create a persistent browser-specific ID
-            if 'browser_session_id' not in st.session_state:
-                import uuid
-                import time
-                # Create a unique session ID for this browser
-                browser_id = f"browser_{uuid.uuid4().hex[:12]}_{int(time.time())}"
-                st.session_state.browser_session_id = browser_id
+        def get_browser_identifier():
+            """Get a persistent browser identifier using Streamlit runtime info."""
+            try:
+                # Use streamlit runtime context to get browser info
+                from streamlit.runtime.scriptrunner import get_script_run_ctx
+                from streamlit.runtime import get_instance
+                
+                ctx = get_script_run_ctx()
+                if ctx and ctx.session_id:
+                    # Use the session's browser info to create a persistent ID
+                    import hashlib
+                    
+                    # Get runtime instance for additional info
+                    runtime = get_instance()
+                    session = runtime._session_mgr.get_session_info(ctx.session_id)
+                    
+                    if session:
+                        # Create hash from browser/connection info that persists across sessions
+                        browser_info = f"{session.session.browser_info.user_agent if hasattr(session.session, 'browser_info') else 'unknown'}"
+                        client_info = f"{getattr(session.session, 'client_state', 'unknown')}"
+                        
+                        # Create a more persistent identifier
+                        persistent_id = hashlib.md5(f"{browser_info}-{client_info}".encode()).hexdigest()[:12]
+                        return persistent_id
+            except:
+                pass
             
-            return st.session_state.browser_session_id
+            # Fallback: create a simple time-based ID stored in a local file
+            browser_id_file = '.browser_id.txt'
+            try:
+                if os.path.exists(browser_id_file):
+                    with open(browser_id_file, 'r') as f:
+                        return f.read().strip()
+                else:
+                    import uuid
+                    browser_id = f"browser_{uuid.uuid4().hex[:8]}"
+                    with open(browser_id_file, 'w') as f:
+                        f.write(browser_id)
+                    return browser_id
+            except:
+                pass
+                
+            # Final fallback
+            return "default_browser"
         
         def load_saved_credentials():
-            """Load saved credentials from browser session state."""
-            # Check if credentials are saved in this browser session
-            if 'remember_me_credentials' in st.session_state:
-                return st.session_state.remember_me_credentials
-            return {"email": "", "password": "", "remember": False}
+            """Load saved credentials from browser-specific file."""
+            try:
+                browser_id = get_browser_identifier()
+                filename = f'.remember_me_{browser_id}.json'
+                
+                if os.path.exists(filename):
+                    with open(filename, 'r') as f:
+                        return json.load(f)
+                return {"email": "", "password": "", "remember": False}
+            except:
+                return {"email": "", "password": "", "remember": False}
         
         def save_credentials(email, password, remember):
-            """Save credentials to browser session state."""
-            if remember:
-                # Save credentials in session state (persists for this browser)
-                st.session_state.remember_me_credentials = {
-                    "email": email,
-                    "password": password, 
-                    "remember": True
-                }
-            else:
-                # Clear saved credentials
-                if 'remember_me_credentials' in st.session_state:
-                    del st.session_state.remember_me_credentials
+            """Save credentials to browser-specific file."""
+            try:
+                browser_id = get_browser_identifier()
+                filename = f'.remember_me_{browser_id}.json'
+                
+                if remember:
+                    data = {"email": email, "password": password, "remember": True}
+                    with open(filename, 'w') as f:
+                        json.dump(data, f)
+                else:
+                    # Clear saved credentials
+                    if os.path.exists(filename):
+                        os.remove(filename)
+            except:
+                pass
         
         # Clean up old file-based remember me files
         def cleanup_old_files():
@@ -512,26 +554,26 @@ def show_login_page():
         saved_remember = saved_creds.get("remember", False)
         
         # Debug info
-        if st.checkbox("🔍 Show browser session debug info", key="show_debug_remember"):
-            browser_id = get_browser_session_id()
-            st.code(f"Browser Session ID: {browser_id}")
-            st.info("💡 Remember me now works per browser session (like normal websites)")
+        if st.checkbox("🔍 Show browser debug info", key="show_debug_remember"):
+            browser_id = get_browser_identifier()
+            st.code(f"Browser ID: {browser_id}")
+            st.code(f"Remember me file: .remember_me_{browser_id}.json")
+            st.info("💡 Remember me now works per browser instance (persistent across page refreshes)")
             if saved_email:
                 st.success(f"Found saved credentials for: {saved_email}")
             else:
-                st.info("No saved credentials found in this browser session")
+                st.info("No saved credentials found for this browser")
             
-            # Show session state info
-            with st.expander("Session state info"):
-                if 'remember_me_credentials' in st.session_state:
-                    st.write("✅ Credentials saved in browser session")
-                else:
-                    st.write("❌ No credentials saved")
-                
-                if st.button("🗑️ Clear Browser Session", key="clear_session"):
-                    st.session_state.clear()
-                    st.success("✅ Browser session cleared")
+            # Show file info
+            filename = f'.remember_me_{browser_id}.json'
+            if os.path.exists(filename):
+                st.write("✅ Remember me file exists")
+                if st.button("🗑️ Clear Saved Credentials", key="clear_credentials"):
+                    os.remove(filename)
+                    st.success("✅ Saved credentials cleared")
                     st.info("🔄 Please refresh the page")
+            else:
+                st.write("❌ No remember me file found")
         
         with st.form("login_form"):
             email = st.text_input("Email:", value=saved_email, key="login_email")
