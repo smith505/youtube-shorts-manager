@@ -1254,9 +1254,12 @@ def main():
                         result = {"success": False, "error": f"API call failed: {str(api_error)}"}
                     
                     if result["success"]:
+                        # Initialize variables to ensure they're always defined
+                        content = result.get("content", "No content available")
+                        titles = []
+                        
                         try:
                             # Extract and save titles
-                            content = result["content"]
                             titles = extract_titles_from_response(content)
                             
                             # Debug: Show what titles were found
@@ -1299,25 +1302,34 @@ def main():
                         
                         st.subheader("📄 Generated Script:")
                         
+                        # Debug info for admin
+                        if user_role == 'admin':
+                            st.caption(f"Debug: Content length: {len(content) if content else 'None'} characters")
+                        
                         # Create expandable section for better organization
-                        with st.expander("🔽 **View Full Generated Script**", expanded=True):
-                            # Use text_area with proper height and wrapping instead of st.code to prevent cutoff
-                            st.text_area(
-                                "Generated Content (Click to copy):",
-                                value=content,
-                                height=500,
-                                disabled=True,
-                                help="Full generated script with proper text wrapping - click and Ctrl+A to select all, then Ctrl+C to copy",
-                                key=f"script_display_{session_id}"
-                            )
-                            
-                            # Add character and word count
-                            word_count = len(content.split())
-                            char_count = len(content)
-                            st.caption(f"📊 **Stats:** {word_count} words, {char_count} characters")
-                            
-                            # Add copy button hint
-                            st.info("💡 **Tip:** Click inside the text area above, then use Ctrl+A to select all and Ctrl+C to copy the entire script.")
+                        try:
+                            with st.expander("🔽 **View Full Generated Script**", expanded=True):
+                                # Use text_area with proper height and wrapping instead of st.code to prevent cutoff
+                                st.text_area(
+                                    "Generated Content (Click to copy):",
+                                    value=content if content else "No content available",
+                                    height=500,
+                                    disabled=True,
+                                    help="Full generated script with proper text wrapping - click and Ctrl+A to select all, then Ctrl+C to copy",
+                                    key=f"script_display_{session_id}"
+                                )
+                                
+                                # Add character and word count
+                                if content:
+                                    word_count = len(content.split())
+                                    char_count = len(content)
+                                    st.caption(f"📊 **Stats:** {word_count} words, {char_count} characters")
+                                
+                                # Add copy button hint
+                                st.info("💡 **Tip:** Click inside the text area above, then use Ctrl+A to select all and Ctrl+C to copy the entire script.")
+                        except Exception as display_error:
+                            st.error(f"❌ Error displaying script: {str(display_error)}")
+                            st.text_area("Fallback content:", value=str(content) if content else "No content", height=200, disabled=True)
                         
                         # Display token usage for admins
                         if user_role == 'admin' and 'token_usage' in result:
@@ -1361,7 +1373,22 @@ def main():
                         st.info(f"Session ID: {session_id}")
                         
                     else:
+                        # Generation failed, but still show what we got
                         st.error(f"❌ Generation failed: {result['error']}")
+                        content = result.get("content", f"Generation failed: {result.get('error', 'Unknown error')}")
+                        titles = []
+                        
+                        # Still show the failed content for debugging
+                        st.subheader("📄 Error Response:")
+                        with st.expander("🔽 **View Error Details**", expanded=True):
+                            st.text_area(
+                                "Error response content:",
+                                value=content,
+                                height=300,
+                                disabled=True,
+                                help="Response from API (may contain error details)",
+                                key=f"error_display_{session_id}"
+                            )
                 
                 # Clear generating flag and force UI refresh
                 if 'generating' in st.session_state:
