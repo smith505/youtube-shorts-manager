@@ -693,48 +693,83 @@ def show_login_page():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("🔄 Sync Users to Google Drive", type="primary"):
-                        try:
-                            # Try to get existing drive manager first
-                            drive_manager = st.session_state.get('drive_manager', None)
-                            
-                            # If no drive manager, create one specifically for user sync
-                            if not drive_manager or not hasattr(drive_manager, 'service') or not drive_manager.service:
-                                st.info("🔄 Initializing Google Drive connection...")
+                        with st.spinner("Attempting Google Drive sync..."):
+                            try:
+                                st.write("**Debug Steps:**")
                                 
-                                # Import and create a new GoogleDriveManager
-                                import sys
-                                import os
+                                # Step 1: Check existing drive manager
+                                drive_manager = st.session_state.get('drive_manager', None)
+                                st.write(f"1. Existing drive_manager: {'✅ Found' if drive_manager else '❌ None'}")
                                 
-                                # Import GoogleDriveManager from streamlit_app
-                                try:
-                                    from streamlit_app import GoogleDriveManager
-                                    drive_manager = GoogleDriveManager()
+                                # Step 2: Try to create new drive manager
+                                if not drive_manager or not hasattr(drive_manager, 'service') or not drive_manager.service:
+                                    st.write("2. Creating new GoogleDriveManager...")
                                     
-                                    if drive_manager and hasattr(drive_manager, 'service') and drive_manager.service:
-                                        st.success("✅ Google Drive connected!")
-                                    else:
-                                        st.error("❌ Failed to connect to Google Drive")
+                                    try:
+                                        from streamlit_app import GoogleDriveManager
+                                        st.write("   - GoogleDriveManager imported ✅")
+                                        
+                                        drive_manager = GoogleDriveManager()
+                                        st.write("   - GoogleDriveManager created ✅")
+                                        
+                                        if hasattr(drive_manager, 'service'):
+                                            service_status = "✅ Available" if drive_manager.service else "❌ None"
+                                            st.write(f"   - Service status: {service_status}")
+                                        else:
+                                            st.write("   - No service attribute ❌")
+                                            
+                                        if hasattr(drive_manager, 'folder_id'):
+                                            folder_status = "✅ Available" if drive_manager.folder_id else "❌ None"
+                                            st.write(f"   - Folder ID: {folder_status}")
+                                        else:
+                                            st.write("   - No folder_id attribute ❌")
+                                            
+                                    except Exception as create_error:
+                                        st.write(f"   - Creation failed: {str(create_error)}")
                                         drive_manager = None
-                                except Exception as import_error:
-                                    st.error(f"❌ Could not initialize Google Drive: {str(import_error)}")
-                                    drive_manager = None
-                            
-                            if drive_manager and hasattr(drive_manager, 'service') and drive_manager.service:
-                                # Update the user manager's drive manager reference
-                                st.session_state.user_manager.drive_manager = drive_manager
+                                else:
+                                    st.write("2. Using existing drive manager ✅")
                                 
-                                # Force sync users and pending
-                                st.session_state.user_manager.save_users()
-                                st.session_state.user_manager.save_pending()
-                                
-                                st.success("✅ User data synced to Google Drive!")
-                                st.info("Check your 'YouTube Shorts Manager' folder in Google Drive")
-                            else:
-                                st.error("❌ Could not establish Google Drive connection")
-                                
-                        except Exception as e:
-                            st.error(f"❌ Sync failed: {str(e)}")
-                            st.error("Please make sure your Google Drive credentials are properly configured.")
+                                # Step 3: Attempt sync
+                                if drive_manager and hasattr(drive_manager, 'service') and drive_manager.service:
+                                    st.write("3. Attempting to sync users...")
+                                    
+                                    # Update the user manager's drive manager reference
+                                    st.session_state.user_manager.drive_manager = drive_manager
+                                    
+                                    # Check what we're trying to sync
+                                    user_count = len(st.session_state.user_manager.users)
+                                    pending_count = len(st.session_state.user_manager.pending)
+                                    st.write(f"   - Users to sync: {user_count} approved, {pending_count} pending")
+                                    
+                                    try:
+                                        # Force sync users and pending
+                                        st.session_state.user_manager.save_users()
+                                        st.write("   - save_users() completed ✅")
+                                        
+                                        st.session_state.user_manager.save_pending()
+                                        st.write("   - save_pending() completed ✅")
+                                        
+                                        st.success("✅ User data synced to Google Drive!")
+                                        st.info("Check your 'YouTube Shorts Manager' folder in Google Drive")
+                                        
+                                    except Exception as sync_error:
+                                        st.write(f"   - Sync error: {str(sync_error)}")
+                                        st.error(f"❌ Sync failed during save: {str(sync_error)}")
+                                else:
+                                    st.write("3. ❌ Drive manager not ready for sync")
+                                    if drive_manager:
+                                        st.write(f"   - Has service: {hasattr(drive_manager, 'service')}")
+                                        if hasattr(drive_manager, 'service'):
+                                            st.write(f"   - Service value: {drive_manager.service}")
+                                    else:
+                                        st.write("   - Drive manager is None")
+                                    
+                            except Exception as e:
+                                st.error(f"❌ Sync failed: {str(e)}")
+                                st.write(f"**Error details:** {str(e)}")
+                                import traceback
+                                st.code(traceback.format_exc())
                 
                 with col2:
                     if st.button("📥 Load from Google Drive"):
