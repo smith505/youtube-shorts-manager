@@ -18,7 +18,10 @@
       "Bash(grep:*)",
       "Bash(sed:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(tar:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)"
     ],
     "deny": []
   }
