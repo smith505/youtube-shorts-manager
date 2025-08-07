@@ -629,13 +629,19 @@ class ChannelManager:
             st.error(f"Failed to bulk delete titles for {channel_name}: {str(e)}")
             return 0, 0
     
-    def save_script(self, channel_name: str, content: str, session_id: str):
+    def save_script(self, channel_name: str, content: str, session_id: str, user_name: str = None):
         """Save the full generated script to a channel's Google Drive folder."""
         filename = f"saved_scripts_{channel_name.lower()}.txt"
         try:
             # Get or create the channel folder
             channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
-            script_content = content + "\n\n\n"  # Add three blank lines between scripts
+            
+            # Add user attribution and timestamp to the script
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            attribution = f"Created by: {user_name if user_name else 'Unknown User'} on {timestamp}\n"
+            separator = "="*50 + "\n\n"
+            
+            script_content = attribution + content + "\n\n" + separator + "\n"  # Add attribution, content, and separator
             self.drive_manager.append_to_file(filename, script_content, channel_folder_id)
         except Exception as e:
             st.error(f"Failed to save script for {channel_name} to Google Drive: {str(e)}")
@@ -1682,7 +1688,8 @@ def main():
                             
                             # Save script
                             try:
-                                st.session_state.channel_manager.save_script(selected_channel, content, session_id)
+                                user_name = current_user.get('first_name', 'Unknown User')
+                                st.session_state.channel_manager.save_script(selected_channel, content, session_id, user_name)
                             except Exception as script_error:
                                 st.error(f"❌ Failed to save script: {str(script_error)}")
                         
