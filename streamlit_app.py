@@ -1109,6 +1109,75 @@ def main():
         
         st.markdown("---")
         
+        # Show last successful generation results if they exist
+        if 'last_successful_generation' in st.session_state and st.session_state.last_successful_generation.get('channel') == selected_channel:
+            gen_data = st.session_state.last_successful_generation
+            
+            st.success(f"✅ Last generation completed successfully! Found {len(gen_data['titles'])} titles.")
+            
+            # Show titles
+            if gen_data['titles']:
+                st.subheader("📋 Extracted Titles:")
+                for i, title in enumerate(gen_data['titles'], 1):
+                    st.write(f"{i}. {title}")
+            
+            # Show script
+            st.subheader("📄 Generated Script:")
+            
+            # Debug info for admin
+            if user_role == 'admin':
+                st.caption(f"Generated: {gen_data['timestamp']}")
+                st.caption(f"Content length: {len(gen_data['content']) if gen_data['content'] else 'None'} characters")
+            
+            # Script display
+            with st.expander("🔽 **View Full Generated Script**", expanded=True):
+                st.text_area(
+                    "Generated Content (Click to copy):",
+                    value=gen_data['content'] if gen_data['content'] else "No content available",
+                    height=500,
+                    disabled=True,
+                    help="Full generated script with proper text wrapping - click and Ctrl+A to select all, then Ctrl+C to copy",
+                    key=f"persisted_script_display_{gen_data['session_id']}"
+                )
+                
+                # Add character and word count
+                if gen_data['content']:
+                    word_count = len(gen_data['content'].split())
+                    char_count = len(gen_data['content'])
+                    st.caption(f"📊 **Stats:** {word_count} words, {char_count} characters")
+                
+                st.info("💡 **Tip:** Click inside the text area above, then use Ctrl+A to select all and Ctrl+C to copy the entire script.")
+            
+            # Show token usage for admins
+            if user_role == 'admin' and gen_data.get('token_usage'):
+                token_info = gen_data['token_usage']
+                with st.expander("📊 **Token Usage Stats** (Admin Only)", expanded=False):
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Input Tokens", f"{token_info.get('input_tokens', 0):,}")
+                    with col2:
+                        st.metric("Output Tokens", f"{token_info.get('output_tokens', 0):,}")
+                    with col3:
+                        st.metric("Total Tokens", f"{token_info.get('total_tokens', 0):,}")
+                    
+                    # Cost estimation
+                    input_cost = (token_info.get('input_tokens', 0) / 1_000_000) * 3.00
+                    output_cost = (token_info.get('output_tokens', 0) / 1_000_000) * 15.00
+                    total_cost = input_cost + output_cost
+                    
+                    st.write("**💰 Cost Estimation:**")
+                    st.write(f"Total cost: ${total_cost:.4f}")
+            
+            st.info(f"Session ID: {gen_data['session_id']}")
+            
+            # Clear button for admin
+            if user_role == 'admin':
+                if st.button("🗑️ Clear Results"):
+                    del st.session_state.last_successful_generation
+                    st.rerun()
+            
+            st.markdown("---")
+        
         # Show persistent error if exists
         if 'last_generation_error' in st.session_state and user_role == 'admin':
             with st.expander("⚠️ **Last Generation Error** (Admin Only)", expanded=False):
@@ -1380,6 +1449,19 @@ def main():
                         # Debug: Confirm end of successful generation display
                         if user_role == 'admin':
                             st.success("🔍 Debug: Completed successful generation display - script should be visible above")
+                        
+                        # Store successful generation in session state so it persists after rerun
+                        st.session_state.last_successful_generation = {
+                            "content": content,
+                            "titles": titles,
+                            "session_id": session_id,
+                            "channel": selected_channel,
+                            "token_usage": result.get('token_usage', {}),
+                            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                        
+                        # Now we can safely rerun to update button state
+                        st.rerun()
                         
                     else:
                         # Generation failed, but still show what we got
