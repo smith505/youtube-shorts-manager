@@ -480,26 +480,31 @@ def show_login_page():
                         
                         # Create a more persistent identifier
                         persistent_id = hashlib.md5(f"{browser_info}-{client_info}".encode()).hexdigest()[:12]
+                        print(f"DEBUG: Using runtime browser ID: {persistent_id}")
                         return persistent_id
-            except:
-                pass
+            except Exception as e:
+                print(f"DEBUG: Runtime context failed: {e}")
             
             # Fallback: create a simple time-based ID stored in a local file
             browser_id_file = '.browser_id.txt'
             try:
                 if os.path.exists(browser_id_file):
                     with open(browser_id_file, 'r') as f:
-                        return f.read().strip()
+                        browser_id = f.read().strip()
+                        print(f"DEBUG: Using saved browser ID: {browser_id}")
+                        return browser_id
                 else:
                     import uuid
                     browser_id = f"browser_{uuid.uuid4().hex[:8]}"
                     with open(browser_id_file, 'w') as f:
                         f.write(browser_id)
+                    print(f"DEBUG: Created new browser ID: {browser_id}")
                     return browser_id
-            except:
-                pass
+            except Exception as e:
+                print(f"DEBUG: Fallback browser ID failed: {e}")
                 
             # Final fallback
+            print("DEBUG: Using default browser ID")
             return "default_browser"
         
         def load_saved_credentials():
@@ -521,16 +526,27 @@ def show_login_page():
                 browser_id = get_browser_identifier()
                 filename = f'.remember_me_{browser_id}.json'
                 
+                # Debug output
+                print(f"DEBUG save_credentials: remember={remember}, browser_id={browser_id}, filename={filename}")
+                
                 if remember:
                     data = {"email": email, "password": password, "remember": True}
                     with open(filename, 'w') as f:
                         json.dump(data, f)
+                    print(f"DEBUG: Saved credentials to {filename}")
+                    
+                    # Verify file was created
+                    if os.path.exists(filename):
+                        print(f"DEBUG: File {filename} exists after saving")
+                    else:
+                        print(f"DEBUG: ERROR - File {filename} NOT found after saving")
                 else:
                     # Clear saved credentials
                     if os.path.exists(filename):
                         os.remove(filename)
-            except:
-                pass
+                        print(f"DEBUG: Removed credentials file {filename}")
+            except Exception as e:
+                print(f"DEBUG: Exception in save_credentials: {e}")
         
         # Clean up old file-based remember me files
         def cleanup_old_files():
