@@ -191,29 +191,44 @@ class UserManager:
     
     def delete_user(self, email: str) -> dict:
         """Delete a user account from both approved and pending lists (admin only)."""
-        email = email.lower()
+        original_email = email
+        email_lower = email.lower()
         deleted_from = []
         user_name = email
+        actual_email_found = None
         
-        # Check and remove from approved users
-        if email in self.users:
-            user_name = self.users[email]['first_name']
-            del self.users[email]
-            self.save_users()
-            deleted_from.append("approved users")
+        # Check and remove from approved users (case-insensitive search)
+        for user_email in list(self.users.keys()):
+            if user_email.lower() == email_lower:
+                user_name = self.users[user_email]['first_name']
+                actual_email_found = user_email
+                del self.users[user_email]
+                self.save_users()
+                deleted_from.append("approved users")
+                break
         
-        # Check and remove from pending users
-        if email in self.pending:
-            if user_name == email:  # If we didn't get name from approved users
-                user_name = self.pending[email]['first_name']
-            del self.pending[email]
-            self.save_pending()
-            deleted_from.append("pending users")
+        # Check and remove from pending users (case-insensitive search)  
+        for user_email in list(self.pending.keys()):
+            if user_email.lower() == email_lower:
+                if user_name == email or user_name == email_lower:  # If we didn't get name from approved users
+                    user_name = self.pending[user_email]['first_name']
+                if not actual_email_found:
+                    actual_email_found = user_email
+                del self.pending[user_email]
+                self.save_pending()
+                deleted_from.append("pending users")
+                break
         
         if not deleted_from:
-            return {"success": False, "error": f"User {email} not found in approved or pending lists"}
+            # Show debug info
+            approved_emails = list(self.users.keys())
+            pending_emails = list(self.pending.keys())
+            return {
+                "success": False, 
+                "error": f"User '{original_email}' not found. Available emails - Approved: {approved_emails}, Pending: {pending_emails}"
+            }
         
-        return {"success": True, "message": f"User {user_name} ({email}) deleted from {' and '.join(deleted_from)}"}
+        return {"success": True, "message": f"User {user_name} ({actual_email_found}) deleted from {' and '.join(deleted_from)}"}
     
     def get_all_users(self) -> list:
         """Get list of all approved users for admin management."""
