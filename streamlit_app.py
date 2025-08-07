@@ -494,7 +494,7 @@ class ChannelManager:
         filename = f"titles_{channel_name.lower()}.txt"
         try:
             # Get existing titles to avoid duplicates
-            existing_titles = self.get_used_titles(channel_name)
+            existing_titles = self.get_used_titles(channel_name, force_refresh=False)
             
             # Filter out duplicates and empty titles
             new_titles = []
@@ -988,10 +988,10 @@ def main():
                 with col3:
                     # Show current title count
                     try:
-                        current_titles = st.session_state.channel_manager.get_used_titles(selected_channel)
+                        current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=False)
                         st.write(f"**Current titles in {selected_channel}: {len(current_titles)}**")
-                    except:
-                        st.write("**Current titles: Unable to load**")
+                    except Exception as e:
+                        st.write(f"**Current titles: Unable to load** ({str(e)})")
         
         # Handle channel deletion confirmation
         if 'delete_channel_confirm' in st.session_state and st.session_state.delete_channel_confirm == selected_channel:
@@ -1116,9 +1116,17 @@ def main():
                 st.error(f"**Error:** {error_info['error']}")
                 st.write(f"**Time:** {error_info['timestamp']}")
                 st.text_area("Full traceback:", value=error_info['traceback'], height=150, disabled=True)
-                if st.button("Clear Error Log"):
-                    del st.session_state.last_generation_error
-                    st.rerun()
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Clear Error Log"):
+                        del st.session_state.last_generation_error
+                        st.rerun()
+                with col2:
+                    if st.button("🔄 Refresh Channel Manager"):
+                        st.session_state.channel_manager = ChannelManager(st.session_state.drive_manager)
+                        st.success("Channel manager refreshed!")
+                        st.rerun()
         
         # Script generation
         st.subheader("🎯 Generate New Script")
@@ -1144,8 +1152,14 @@ def main():
             try:
                 with st.spinner("🎬 Generating your script... This may take 10-30 seconds..."):
                     try:
-                        # Get used titles for exclusion - FORCE REFRESH to get latest from Google Drive
-                        used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                        # Try with force_refresh first, fallback without it if there's an error
+                        try:
+                            used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                        except TypeError:
+                            # Fallback for old method signature - refresh channel manager
+                            st.warning("Refreshing channel manager...")
+                            st.session_state.channel_manager = ChannelManager(st.session_state.drive_manager)
+                            used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
                         
                         # Debug: Show how many titles we're excluding
                         if user_role == 'admin':
