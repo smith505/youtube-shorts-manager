@@ -64,17 +64,14 @@ class UserManager:
         pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         return re.match(pattern, email) is not None
     
-    def register_user(self, first_name: str, email: str, password: str) -> dict:
-        """Register a new user (pending approval)."""
+    def register_user(self, first_name: str, email: str) -> dict:
+        """Register a new user (pending approval) - no password required."""
         # Validation
         if not first_name.strip():
             return {"success": False, "error": "First name is required"}
         
         if not self.validate_email(email):
             return {"success": False, "error": "Invalid email format"}
-        
-        if len(password) < 6:
-            return {"success": False, "error": "Password must be at least 6 characters"}
         
         # Check if user already exists
         if email in self.users:
@@ -87,7 +84,6 @@ class UserManager:
         user_data = {
             "first_name": first_name.strip(),
             "email": email.lower(),
-            "password": self.hash_password(password),
             "requested_at": datetime.now(),
             "token": str(uuid.uuid4())
         }
@@ -161,7 +157,6 @@ class UserManager:
                 self.users[email] = {
                     "first_name": user_data['first_name'],
                     "email": user_data['email'],
-                    "password": user_data['password'],
                     "approved_at": datetime.now(),
                     "status": "active"
                 }
@@ -180,19 +175,16 @@ class UserManager:
                 return True
         return False
     
-    def login_user(self, email: str, password: str) -> dict:
-        """Authenticate a user login."""
+    def login_user(self, email: str) -> dict:
+        """Authenticate a user login with email only."""
         email = email.lower()
         
         if email not in self.users:
             if email in self.pending:
                 return {"success": False, "error": "Account pending approval"}
-            return {"success": False, "error": "Invalid email or password"}
+            return {"success": False, "error": "Email not found or not approved"}
         
         user = self.users[email]
-        if not self.verify_password(password, user['password']):
-            return {"success": False, "error": "Invalid email or password"}
-        
         if user.get('status') != 'active':
             return {"success": False, "error": "Account is not active"}
         
@@ -204,21 +196,6 @@ class UserManager:
             }
         }
     
-    def reset_user_password(self, email: str, new_password: str) -> dict:
-        """Reset a user's password (admin only)."""
-        email = email.lower()
-        
-        if email not in self.users:
-            return {"success": False, "error": "User not found"}
-        
-        if len(new_password) < 6:
-            return {"success": False, "error": "Password must be at least 6 characters"}
-        
-        # Update the user's password
-        self.users[email]['password'] = self.hash_password(new_password)
-        self.save_users()
-        
-        return {"success": True, "message": f"Password reset for {email}"}
     
     def get_all_users(self) -> list:
         """Get list of all approved users for admin management."""
@@ -282,13 +259,12 @@ def show_login_page():
         st.subheader("Login to Your Account")
         
         with st.form("login_form"):
-            email = st.text_input("Email:", key="login_email")
-            password = st.text_input("Password:", type="password", key="login_password")
-            login_button = st.form_submit_button("🔑 Login", type="primary")
+            email = st.text_input("Email:", key="login_email", help="Enter your approved email address")
+            login_button = st.form_submit_button("🔑 Login with Email", type="primary")
             
             if login_button:
-                if email and password:
-                    result = st.session_state.user_manager.login_user(email, password)
+                if email:
+                    result = st.session_state.user_manager.login_user(email)
                     if result["success"]:
                         st.session_state.authenticated = True
                         st.session_state.user = result["user"]
@@ -297,24 +273,9 @@ def show_login_page():
                     else:
                         st.error(result["error"])
                 else:
-                    st.error("Please enter both email and password")
+                    st.error("Please enter your email address")
         
-        # Forgot Password button
-        if st.button("🔒 Forgot Password?"):
-            st.session_state.show_forgot_password = True
-            st.rerun()
-        
-        # Show forgot password form
-        if st.session_state.get('show_forgot_password', False):
-            st.markdown("---")
-            st.subheader("🔒 Forgot Password")
-            st.info("Please contact the administrator to reset your password.")
-            st.write("**Admin Email:** corysmth14@gmail.com")
-            st.write("**Instructions:** Send an email with your account email address and request a password reset.")
-            
-            if st.button("❌ Cancel"):
-                st.session_state.show_forgot_password = False
-                st.rerun()
+        st.info("💡 **No password needed!** Just enter your approved email address to login.")
     
     with register_tab:
         st.subheader("Create New Account")
@@ -323,20 +284,16 @@ def show_login_page():
         with st.form("register_form"):
             first_name = st.text_input("First Name:", key="reg_first_name")
             email = st.text_input("Email:", key="reg_email")
-            password = st.text_input("Password:", type="password", key="reg_password")
-            confirm_password = st.text_input("Confirm Password:", type="password", key="reg_confirm_password")
             register_button = st.form_submit_button("📝 Create Account", type="primary")
             
             if register_button:
-                if not all([first_name, email, password, confirm_password]):
+                if not all([first_name, email]):
                     st.error("Please fill in all fields")
-                elif password != confirm_password:
-                    st.error("Passwords don't match")
                 else:
-                    result = st.session_state.user_manager.register_user(first_name, email, password)
+                    result = st.session_state.user_manager.register_user(first_name, email)
                     if result["success"]:
                         st.success(result["message"])
-                        st.info("You'll receive an email once your account is approved.")
+                        st.info("Once approved, you can login with just your email address - no password needed!")
                     else:
                         st.error(result["error"])
     
@@ -347,8 +304,8 @@ def show_login_page():
         if admin_password == "admin123":  # Change this password
             st.success("✅ Admin access granted")
             
-            # Create tabs for different admin functions
-            approval_tab, users_tab, reset_tab = st.tabs(["👥 Pending Approvals", "👤 All Users", "🔑 Reset Password"])
+            # Create tabs for different admin functions  
+            approval_tab, users_tab = st.tabs(["👥 Pending Approvals", "👤 All Users"])
             
             with approval_tab:
                 # Show pending users
@@ -394,46 +351,9 @@ def show_login_page():
                 else:
                     st.info("No approved users found")
             
-            with reset_tab:
-                # Password reset functionality
-                st.subheader("🔑 Reset User Password")
-                
-                all_users = st.session_state.user_manager.get_all_users()
-                if all_users:
-                    # Select user to reset
-                    user_emails = [user['email'] for user in all_users]
-                    user_options = [f"{user['first_name']} ({user['email']})" for user in all_users]
-                    
-                    selected_index = st.selectbox(
-                        "Select user to reset password:",
-                        range(len(user_options)),
-                        format_func=lambda x: user_options[x],
-                        key="reset_user_select"
-                    )
-                    
-                    selected_email = user_emails[selected_index]
-                    
-                    with st.form("reset_password_form"):
-                        new_password = st.text_input("New Password (min 6 characters):", type="password", key="new_password")
-                        confirm_password = st.text_input("Confirm New Password:", type="password", key="confirm_new_password")
-                        reset_button = st.form_submit_button("🔑 Reset Password", type="primary")
-                        
-                        if reset_button:
-                            if not new_password:
-                                st.error("Please enter a new password")
-                            elif len(new_password) < 6:
-                                st.error("Password must be at least 6 characters")
-                            elif new_password != confirm_password:
-                                st.error("Passwords don't match")
-                            else:
-                                result = st.session_state.user_manager.reset_user_password(selected_email, new_password)
-                                if result["success"]:
-                                    st.success(f"✅ {result['message']}")
-                                    st.info(f"New password for {selected_email}: **{new_password}**")
-                                else:
-                                    st.error(f"❌ {result['error']}")
-                else:
-                    st.info("No users available for password reset")
+            
+            st.markdown("---")
+            st.success("💡 **Passwordless System Active!** Users only need email approval to login.")
             
         elif admin_password:
             st.error("❌ Invalid admin password")
