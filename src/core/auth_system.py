@@ -461,30 +461,54 @@ def show_login_page():
             """Generate a unique identifier for this computer and location."""
             import platform
             import hashlib
+            import uuid
             
-            # Combine multiple system identifiers to create unique computer ID
+            # Start with basic system info
             system_info = f"{platform.node()}-{platform.system()}-{platform.machine()}"
             
-            # Add user-specific info to make it truly computer+user specific
+            # Add user-specific info
             try:
                 import getpass
                 system_info += f"-{getpass.getuser()}"
             except:
                 pass
             
-            # Add current working directory to make it location-specific too
+            # Add current working directory
             try:
                 system_info += f"-{os.getcwd()}"
+            except:
+                pass
+            
+            # Add additional unique identifiers
+            try:
+                # Add processor info
+                system_info += f"-{platform.processor()}"
+            except:
+                pass
+                
+            try:
+                # Add network info - MAC address as unique hardware identifier
+                import uuid
+                mac_address = hex(uuid.getnode())[2:]  # Get MAC address
+                system_info += f"-{mac_address}"
+            except:
+                pass
+                
+            try:
+                # Add environment variables that might be computer-specific
+                system_info += f"-{os.environ.get('COMPUTERNAME', '')}"
+                system_info += f"-{os.environ.get('USERNAME', '')}"
+                system_info += f"-{os.environ.get('USERPROFILE', '')}"
             except:
                 pass
                 
             # Hash it to create a consistent but anonymous ID
             computer_id = hashlib.md5(system_info.encode()).hexdigest()[:16]
-            return computer_id
+            return computer_id, system_info  # Return both for debugging
         
         def load_saved_credentials():
             try:
-                computer_id = get_computer_id()
+                computer_id, _ = get_computer_id()
                 filename = f'.remember_me_{computer_id}.json'
                 
                 if os.path.exists(filename):
@@ -496,7 +520,7 @@ def show_login_page():
         
         def save_credentials(email, password, remember):
             try:
-                computer_id = get_computer_id()
+                computer_id, _ = get_computer_id()
                 filename = f'.remember_me_{computer_id}.json'
                 
                 data = {"email": email if remember else "", "password": password if remember else "", "remember": remember}
@@ -533,12 +557,16 @@ def show_login_page():
         
         # Debug info (remove in production)
         if st.checkbox("🔍 Show debug info", key="show_debug_remember"):
-            computer_id = get_computer_id()
+            computer_id, system_info = get_computer_id()
             st.code(f"Computer ID: {computer_id}")
             st.code(f"Remember me file: .remember_me_{computer_id}.json")
             st.code(f"Working directory: {os.getcwd()}")
+            with st.expander("Full system info used for ID"):
+                st.code(system_info)
             if saved_email:
                 st.success(f"Found saved credentials for: {saved_email}")
+            else:
+                st.info("No saved credentials found")
         
         with st.form("login_form"):
             email = st.text_input("Email:", value=saved_email, key="login_email")
