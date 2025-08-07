@@ -771,6 +771,18 @@ def extract_titles_from_response(content: str) -> List[str]:
 from src.core.auth_system import show_login_page, check_authentication, get_current_user
 
 
+def clear_all_modals():
+    """Clear all open modals/panels to ensure only one is open at a time."""
+    modal_keys = [
+        'editing_prompt', 'add_titles_modal', 'delete_titles_modal', 
+        'clear_titles_confirm', 'clear_scripts_confirm', 'delete_channel_confirm',
+        'adding_channel'
+    ]
+    for key in modal_keys:
+        if key in st.session_state:
+            del st.session_state[key]
+
+
 def main():
     """Main Streamlit application."""
     
@@ -782,6 +794,11 @@ def main():
         
         # Get current user
         current_user = get_current_user()
+        
+        # Clear all modals on initial login to ensure clean state
+        if 'modals_cleared_on_login' not in st.session_state:
+            clear_all_modals()
+            st.session_state.modals_cleared_on_login = True
         
         # Initialize session state
         if 'drive_manager' not in st.session_state:
@@ -994,17 +1011,6 @@ def main():
                     del st.session_state.adding_channel
                     st.rerun()
     
-    # Function to clear all modal states
-    def clear_all_modals():
-        """Clear all open modals/panels to ensure only one is open at a time."""
-        modal_keys = [
-            'editing_prompt', 'add_titles_modal', 'delete_titles_modal', 
-            'clear_titles_confirm', 'clear_scripts_confirm', 'delete_channel_confirm',
-            'adding_channel'
-        ]
-        for key in modal_keys:
-            if key in st.session_state:
-                del st.session_state[key]
 
     # Main content area
     if selected_channel:
