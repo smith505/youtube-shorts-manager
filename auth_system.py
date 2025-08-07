@@ -29,38 +29,42 @@ class UserManager:
         self.users = {}
         self.pending = {}
         
-        # Load approved users
+        # Load approved users - prioritize Google Drive (master copy)
+        users_loaded_from_drive = False
         try:
-            # Try Google Drive first
+            # Try Google Drive first - it's the master copy
             if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
                 drive_content = self.drive_manager.read_file(self.users_file)
                 if drive_content.strip():
                     self.users = json.loads(drive_content)
                     print("✅ Loaded users from Google Drive")
+                    users_loaded_from_drive = True
             
-            # Fallback to local file
-            if not self.users and os.path.exists(self.users_file):
+            # Only use local file if Drive is unavailable or empty
+            if not users_loaded_from_drive and os.path.exists(self.users_file):
                 with open(self.users_file, 'r') as f:
                     self.users = json.load(f)
-                    print("📁 Loaded users from local file")
+                    print("📁 Loaded users from local file (Drive unavailable)")
         except Exception as e:
             print(f"Error loading users: {str(e)}")
             self.users = {}
             
-        # Load pending users
+        # Load pending users - prioritize Google Drive (master copy)
+        pending_loaded_from_drive = False
         try:
-            # Try Google Drive first
+            # Try Google Drive first - it's the master copy
             if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
                 drive_content = self.drive_manager.read_file(self.pending_file)
                 if drive_content.strip():
                     self.pending = json.loads(drive_content)
                     print("✅ Loaded pending users from Google Drive")
+                    pending_loaded_from_drive = True
             
-            # Fallback to local file
-            if not self.pending and os.path.exists(self.pending_file):
+            # Only use local file if Drive is unavailable or empty
+            if not pending_loaded_from_drive and os.path.exists(self.pending_file):
                 with open(self.pending_file, 'r') as f:
                     self.pending = json.load(f)
-                    print("📁 Loaded pending users from local file")
+                    print("📁 Loaded pending users from local file (Drive unavailable)")
         except Exception as e:
             print(f"Error loading pending users: {str(e)}")
             self.pending = {}
@@ -94,24 +98,39 @@ class UserManager:
             print(f"Error saving pending users: {str(e)}")
     
     def auto_sync_on_startup(self):
-        """Automatically sync users to Google Drive on startup."""
+        """Automatically sync users with Google Drive on startup - load from Drive first."""
         try:
-            # Only try auto-sync if we have local users but no drive connection
-            if (self.users or self.pending) and not (self.drive_manager and hasattr(self.drive_manager, 'service')):
-                # Try to create a Google Drive connection
-                try:
-                    from streamlit_app import GoogleDriveManager
-                    self.drive_manager = GoogleDriveManager()
+            # Try to create a Google Drive connection
+            try:
+                from streamlit_app import GoogleDriveManager
+                drive_manager = GoogleDriveManager()
+                
+                if drive_manager and hasattr(drive_manager, 'service') and drive_manager.service:
+                    self.drive_manager = drive_manager
                     
-                    if self.drive_manager and hasattr(self.drive_manager, 'service') and self.drive_manager.service:
-                        # Auto-sync existing users
+                    # LOAD from Google Drive first (don't overwrite Drive with local data)
+                    drive_users_content = self.drive_manager.read_file(self.users_file)
+                    drive_pending_content = self.drive_manager.read_file(self.pending_file)
+                    
+                    # If Google Drive has users, use those (they're the master copy)
+                    if drive_users_content.strip():
+                        self.users = json.loads(drive_users_content)
+                        print("✅ Loaded users from Google Drive on startup")
+                    elif self.users:  # Only sync TO Drive if Drive is empty but we have local users
                         self.save_users()
-                        self.save_pending()
-                        print("✅ Auto-synced users to Google Drive on startup")
+                        print("✅ Synced local users TO Google Drive on startup")
                     
-                except Exception as sync_error:
-                    print(f"Auto-sync failed (non-critical): {str(sync_error)}")
-                    # Don't show error to user, just log it
+                    # Same for pending users
+                    if drive_pending_content.strip():
+                        self.pending = json.loads(drive_pending_content)
+                        print("✅ Loaded pending users from Google Drive on startup")
+                    elif self.pending:  # Only sync TO Drive if Drive is empty but we have local pending
+                        self.save_pending()
+                        print("✅ Synced local pending users TO Google Drive on startup")
+                
+            except Exception as sync_error:
+                print(f"Auto-sync failed (non-critical): {str(sync_error)}")
+                # Don't show error to user, just log it
                     
         except Exception as e:
             print(f"Auto-sync error (non-critical): {str(e)}")
