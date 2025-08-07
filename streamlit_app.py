@@ -547,32 +547,39 @@ class ChannelManager:
             return 0, 0
     
     def delete_title(self, channel_name: str, title_to_delete: str):
-        """Delete a specific title from a channel's Google Drive folder."""
+        """Delete a specific title from a channel's Google Drive folder while preserving file order."""
         filename = f"titles_{channel_name.lower()}.txt"
         try:
-            # Get all current titles
-            current_titles = self.get_used_titles(channel_name, force_refresh=True)
+            # Get the file content to preserve order
+            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            content = self.drive_manager.read_file(filename, channel_folder_id)
             
-            if title_to_delete not in current_titles:
+            if not content:
+                return False, f"No titles file found for {channel_name}"
+            
+            # Split into lines and preserve order
+            lines = [line.strip() for line in content.split('\n') if line.strip()]
+            
+            if title_to_delete not in lines:
                 return False, f"Title '{title_to_delete}' not found"
             
-            # Remove the title from the set
-            current_titles.remove(title_to_delete)
+            # Remove the title while preserving order
+            lines.remove(title_to_delete)
             
-            # Rewrite the entire file without the deleted title
-            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
-            new_content = "\n".join(sorted(current_titles)) + ("\n" if current_titles else "")
+            # Rewrite the file with preserved order
+            new_content = "\n".join(lines) + ("\n" if lines else "")
             self.drive_manager.write_file(filename, new_content, channel_folder_id)
             
-            # Update cache
+            # Clear cache to force refresh
             cache_key = f"cached_titles_{channel_name}"
             if cache_key in st.session_state:
-                st.session_state[cache_key].discard(title_to_delete)
+                del st.session_state[cache_key]
             
             return True, f"Title '{title_to_delete}' deleted successfully"
             
         except Exception as e:
-            return False, f"Failed to delete title: {str(e)}"
+            import traceback
+            return False, f"Failed to delete title: {str(e)}\n{traceback.format_exc()}"
     
     def bulk_delete_titles(self, channel_name: str, titles_to_delete: list):
         """Delete multiple titles from a channel's Google Drive folder."""
@@ -1112,18 +1119,28 @@ def main():
                                 with col1:
                                     st.write(f"• {title}")
                                 with col2:
-                                    if st.button("❌", key=f"delete_{title}_{i}", help=f"Delete: {title}"):
+                                    if st.button("❌", key=f"delete_{title}_{hash(title)}", help=f"Delete: {title}"):
                                         try:
                                             success, message = st.session_state.channel_manager.delete_title(selected_channel, title)
                                             if success:
+                                                # Clear both caches to force refresh
+                                                cache_key = f"cached_titles_{selected_channel}"
+                                                if cache_key in st.session_state:
+                                                    del st.session_state[cache_key]
+                                                
+                                                # Also clear any ordered titles cache if it exists
+                                                ordered_cache_key = f"ordered_titles_{selected_channel}"
+                                                if ordered_cache_key in st.session_state:
+                                                    del st.session_state[ordered_cache_key]
+                                                
                                                 st.success(f"✅ Deleted: {title}")
-                                                # Force refresh title cache
-                                                st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
                                                 st.rerun()
                                             else:
                                                 st.error(f"❌ {message}")
                                         except Exception as e:
                                             st.error(f"❌ Error deleting title: {str(e)}")
+                                            import traceback
+                                            st.error(f"Full error: {traceback.format_exc()}")
                             
                             # Add a separator between groups for readability
                             if i + 5 < len(titles_list):
