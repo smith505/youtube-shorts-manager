@@ -1131,6 +1131,12 @@ def main():
                         # Build comprehensive exclusion prompt
                         exclusion_parts = []
                         
+                        # Show AI the EXACT titles that have been used
+                        if used_titles_list:
+                            # Limit to most recent 15 titles to avoid prompt being too long
+                            recent_titles = used_titles_list[-15:] if len(used_titles_list) > 15 else used_titles_list
+                            exclusion_parts.append(f"EXISTING TITLES (DO NOT CREATE SIMILAR): {' | '.join(recent_titles)}")
+                        
                         # Exclude ALL used movies (not just 25)
                         if used_movies:
                             all_movies = list(used_movies)
@@ -1140,10 +1146,10 @@ def main():
                         if used_franchises:
                             exclusion_parts.append(f"BANNED FRANCHISES (avoid entirely): {', '.join(used_franchises)}")
                         
-                        # Build strong exclusion prompt
+                        # Build strong exclusion prompt with more explicit instructions
                         if exclusion_parts:
                             exclusion_text = " | ".join(exclusion_parts)
-                            full_prompt = f"🚫 STRICT CONTENT VARIETY ENFORCEMENT: {exclusion_text}. You have already created {len(used_titles_list)} shorts. You MUST choose completely different movies, genres, decades, and topics. Prioritize variety - pick movies from different years, different genres, different studios. NO SEQUELS or related content to anything already used. {base_prompt}"
+                            full_prompt = f"🚫 STRICT ANTI-DUPLICATE ENFORCEMENT: {exclusion_text}. \\n\\nYou have already created {len(used_titles_list)} shorts. You MUST avoid not only the exact movies listed above, but also similar themes, scenes, or concepts. Do NOT create variations or similar stories about the same movies. Choose completely different films, different genres, different decades, different studios. NO SEQUELS, NO SIMILAR SCENES, NO THEMATIC OVERLAP. {base_prompt}"
                         
                         # Add even more aggressive variety instructions
                         full_prompt += f" \\n\\n🎯 VARIETY REQUIREMENTS: Mix different decades (1970s, 1980s, 1990s, 2000s, 2010s, 2020s, and current 2025/recent releases), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries of origin. Avoid any thematic similarities to existing content. \\n\\n🔥 TRENDING PRIORITY: For 2020s-2025 movies, prioritize films featuring currently trending/talked-about actors and actresses (like Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, Jacob Elordi, Jenna Ortega, etc.) as these generate higher engagement and are more likely to go viral."
@@ -1153,6 +1159,15 @@ def main():
                     
                     if extra_prompt.strip():
                         full_prompt += " " + extra_prompt.strip()
+                    
+                    # Debug: Show admin what the AI is receiving (for troubleshooting)
+                    if user_role == 'admin':
+                        with st.expander("🔍 **DEBUG: View AI Prompt** (Admin Only)", expanded=False):
+                            st.text_area("Full prompt sent to AI:", value=full_prompt, height=200, disabled=True)
+                            if used_titles:
+                                st.write(f"**Total existing titles:** {len(used_titles)}")
+                                st.write(f"**Unique movies extracted:** {len(used_movies) if 'used_movies' in locals() else 'N/A'}")
+                                st.write(f"**Franchises detected:** {len(used_franchises) if 'used_franchises' in locals() else 'N/A'}")
                     
                     # Generate script
                     session_id = str(uuid.uuid4())
