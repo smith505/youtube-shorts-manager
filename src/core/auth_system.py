@@ -456,11 +456,33 @@ def show_login_page():
     with login_tab:
         st.subheader("Login to Your Account")
         
-        # Load saved credentials from file
+        # Load saved credentials from computer-specific file
+        def get_computer_id():
+            """Generate a unique identifier for this computer."""
+            import platform
+            import hashlib
+            
+            # Combine multiple system identifiers to create unique computer ID
+            system_info = f"{platform.node()}-{platform.system()}-{platform.machine()}"
+            
+            # Add user-specific info to make it truly computer+user specific
+            try:
+                import getpass
+                system_info += f"-{getpass.getuser()}"
+            except:
+                pass
+                
+            # Hash it to create a consistent but anonymous ID
+            computer_id = hashlib.md5(system_info.encode()).hexdigest()[:16]
+            return computer_id
+        
         def load_saved_credentials():
             try:
-                if os.path.exists('.remember_me.json'):
-                    with open('.remember_me.json', 'r') as f:
+                computer_id = get_computer_id()
+                filename = f'.remember_me_{computer_id}.json'
+                
+                if os.path.exists(filename):
+                    with open(filename, 'r') as f:
                         return json.load(f)
                 return {"email": "", "password": "", "remember": False}
             except:
@@ -468,11 +490,34 @@ def show_login_page():
         
         def save_credentials(email, password, remember):
             try:
+                computer_id = get_computer_id()
+                filename = f'.remember_me_{computer_id}.json'
+                
                 data = {"email": email if remember else "", "password": password if remember else "", "remember": remember}
-                with open('.remember_me.json', 'w') as f:
+                with open(filename, 'w') as f:
                     json.dump(data, f)
+                    
+                # Also clean up old remember_me files if not remembering
+                if not remember:
+                    try:
+                        if os.path.exists(filename):
+                            os.remove(filename)
+                    except:
+                        pass
             except:
                 pass
+        
+        # Clean up old shared remember_me.json file on first load
+        def cleanup_old_remember_me():
+            try:
+                if os.path.exists('.remember_me.json'):
+                    os.remove('.remember_me.json')
+                    st.info("🔒 Remember me is now computer-specific for better security!")
+            except:
+                pass
+        
+        # Clean up old shared file
+        cleanup_old_remember_me()
         
         # Load saved credentials
         saved_creds = load_saved_credentials()
@@ -483,7 +528,8 @@ def show_login_page():
         with st.form("login_form"):
             email = st.text_input("Email:", value=saved_email, key="login_email")
             password = st.text_input("Password:", type="password", value=saved_password, key="login_password")
-            remember_me = st.checkbox("Remember me", value=saved_remember, key="remember_me")
+            remember_me = st.checkbox("Remember me on this computer", value=saved_remember, key="remember_me", 
+                                    help="Credentials are saved locally and specific to this computer only")
             login_button = st.form_submit_button("🔑 Login", type="primary")
             
             if login_button:
