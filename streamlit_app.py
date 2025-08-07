@@ -418,12 +418,24 @@ class ChannelManager:
     def backup_channel_files(self, channel_name: str):
         """Create backup of channel files (titles and scripts)."""
         try:
-            # Check if drive_manager is available
-            if not self.drive_manager or not hasattr(self.drive_manager, 'get_or_create_channel_folder'):
+            # Check if drive_manager exists and is properly initialized
+            if not hasattr(self, 'drive_manager') or self.drive_manager is None:
                 st.warning("Google Drive not available for backup")
                 return False
                 
+            if not hasattr(self.drive_manager, 'service') or self.drive_manager.service is None:
+                st.warning("Google Drive service not available for backup")
+                return False
+                
+            if not hasattr(self.drive_manager, 'get_or_create_channel_folder'):
+                st.warning("Google Drive folder management not available for backup")
+                return False
+                
             channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            if not channel_folder_id:
+                st.warning("Could not access channel folder for backup")
+                return False
+                
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
             # Backup titles file
@@ -442,7 +454,7 @@ class ChannelManager:
             
             return True
         except AttributeError as e:
-            st.warning(f"Backup service not available: {str(e)}")
+            st.warning(f"Backup service not available (missing attribute): {str(e)}")
             return False
         except Exception as e:
             st.error(f"Failed to backup {channel_name}: {str(e)}")
@@ -600,7 +612,7 @@ def main():
         if channels:
             selected_channel = st.selectbox("Select Channel", channels, key="selected_channel")
             
-            # Show last backup time for admins
+            # Show last backup time and next backup countdown for admins
             if user_role == 'admin' and selected_channel:
                 last_backup = st.session_state.last_backup.get(selected_channel)
                 if last_backup:
@@ -608,11 +620,55 @@ def main():
                     hours = int(time_since.total_seconds() / 3600)
                     minutes = int((time_since.total_seconds() % 3600) / 60)
                     st.caption(f"🕐 Last backup: {hours}h {minutes}m ago")
+                    
+                    # Calculate time until next backup (3 hours from last backup)
+                    next_backup = last_backup + timedelta(hours=3)
+                    time_until = next_backup - datetime.now()
+                    
+                    if time_until.total_seconds() > 0:
+                        hours_until = int(time_until.total_seconds() / 3600)
+                        minutes_until = int((time_until.total_seconds() % 3600) / 60)
+                        seconds_until = int(time_until.total_seconds() % 60)
+                        
+                        # Show countdown with different colors based on time remaining
+                        if hours_until > 0:
+                            st.caption(f"⏰ Next backup in: {hours_until}h {minutes_until}m")
+                        elif minutes_until > 0:
+                            st.caption(f"⏰ Next backup in: {minutes_until}m {seconds_until}s")
+                        else:
+                            st.caption(f"⏰ Next backup in: {seconds_until}s")
+                        
+                        # Progress bar showing time until next backup
+                        progress = (3 * 3600 - time_until.total_seconds()) / (3 * 3600)
+                        st.progress(progress, text="Backup progress")
+                    else:
+                        st.caption("🔄 Backup pending (will run on next refresh)")
+                        st.progress(1.0, text="Backup ready")
                 else:
-                    st.caption("🕐 No backup yet")
+                    st.caption("🕐 No backup yet - will run automatically")
         else:
             selected_channel = None
             st.info("No channels yet. Create one below!")
+        
+        st.markdown("---")
+        
+        # Backup settings for admins
+        if user_role == 'admin':
+            with st.expander("⚙️ Backup Settings"):
+                st.write("**Auto-Backup Schedule:**")
+                st.info("• Automatic backups run every 3 hours\n• Files are backed up with timestamps\n• Backups stored in channel folder")
+                
+                # Show all channels backup status
+                st.write("**All Channels Status:**")
+                for ch_name in st.session_state.channel_manager.get_channel_names():
+                    last_bk = st.session_state.last_backup.get(ch_name)
+                    if last_bk:
+                        time_ago = datetime.now() - last_bk
+                        hours_ago = int(time_ago.total_seconds() / 3600)
+                        minutes_ago = int((time_ago.total_seconds() % 3600) / 60)
+                        st.write(f"• {ch_name}: {hours_ago}h {minutes_ago}m ago")
+                    else:
+                        st.write(f"• {ch_name}: Never backed up")
         
         st.markdown("---")
         
@@ -670,9 +726,17 @@ def main():
                     st.session_state.clear_scripts_confirm = selected_channel
             with col4:
                 if st.button("💾 Backup Now"):
-                    if st.session_state.channel_manager.backup_channel_files(selected_channel):
-                        st.success(f"✅ Backup created for {selected_channel}")
-                        st.session_state.last_backup[selected_channel] = datetime.now()
+                    try:
+                        if hasattr(st.session_state, 'channel_manager') and st.session_state.channel_manager:
+                            if st.session_state.channel_manager.backup_channel_files(selected_channel):
+                                st.success(f"✅ Backup created for {selected_channel}")
+                                st.session_state.last_backup[selected_channel] = datetime.now()
+                            else:
+                                st.warning("Backup failed - check Google Drive connection")
+                        else:
+                            st.error("Channel manager not available")
+                    except Exception as e:
+                        st.error(f"Backup error: {str(e)}")
         
         # Handle prompt editing (no password needed for admins)
         if 'editing_prompt' in st.session_state and st.session_state.editing_prompt == selected_channel:
