@@ -815,7 +815,7 @@ def main():
     # Logout button in top right
     col1, col2 = st.columns([4, 1])
     with col2:
-        if st.button("🚪 Logout"):
+        if st.button("🚪 Logout", key="logout_button"):
             del st.session_state.authenticated
             del st.session_state.user
             st.rerun()
@@ -862,13 +862,13 @@ def main():
         st.header("📁 Channel Management")
         
         # Refresh channels
-        if st.button("🔄 Refresh Channels"):
+        if st.button("🔄 Refresh Channels", key="refresh_channels_button"):
             st.session_state.channel_manager.channels = st.session_state.channel_manager.load_channels()
             st.rerun()
         
         # Upload local channels button (admin only)
         if user_role == 'admin':
-            if st.button("📤 Upload Local Channels"):
+            if st.button("📤 Upload Local Channels", key="upload_local_channels_button"):
                 local_channels = {"Swipecore": "You are a ScrollCore-style YouTube Shorts scriptwriter...", "Starwars": "You are a ScrollCore-style YouTube Shorts scriptwriter for Star Wars..."}
                 for name, prompt in local_channels.items():
                     st.session_state.channel_manager.add_channel(name, prompt)
@@ -956,7 +956,7 @@ def main():
             st.subheader("➕ Add New Channel")
             new_channel_name = st.text_input("Channel Name", key="new_channel_name")
             
-            if st.button("Add Channel", type="primary"):
+            if st.button("Add Channel", type="primary", key="add_channel_button"):
                 if new_channel_name.strip():
                     if new_channel_name not in st.session_state.channel_manager.channels:
                         # Show text area for base prompt
@@ -973,7 +973,7 @@ def main():
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("✅ Create"):
+                if st.button("✅ Create", key="create_channel_button"):
                     if base_prompt.strip():
                         st.session_state.channel_manager.add_channel(st.session_state.adding_channel, base_prompt.strip())
                         del st.session_state.adding_channel
@@ -983,7 +983,7 @@ def main():
                         st.error("Please enter a base prompt")
             
             with col2:
-                if st.button("❌ Cancel"):
+                if st.button("❌ Cancel", key="cancel_create_channel_button"):
                     del st.session_state.adding_channel
                     st.rerun()
     
@@ -995,16 +995,16 @@ def main():
         if user_role == 'admin':
             col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
             with col1:
-                if st.button("✏️ Edit Prompt"):
+                if st.button("✏️ Edit Prompt", key=f"edit_prompt_{selected_channel}"):
                     st.session_state.editing_prompt = selected_channel
             with col2:
-                if st.button("🗑️ Clear Titles"):
+                if st.button("🗑️ Clear Titles", key=f"clear_titles_{selected_channel}"):
                     st.session_state.clear_titles_confirm = selected_channel
             with col3:
-                if st.button("🗑️ Clear Scripts"):
+                if st.button("🗑️ Clear Scripts", key=f"clear_scripts_{selected_channel}"):
                     st.session_state.clear_scripts_confirm = selected_channel
             with col4:
-                if st.button("💾 Backup Now"):
+                if st.button("💾 Backup Now", key=f"backup_now_{selected_channel}"):
                     try:
                         if hasattr(st.session_state, 'channel_manager') and st.session_state.channel_manager:
                             if st.session_state.channel_manager.backup_channel_files(selected_channel):
@@ -1357,18 +1357,18 @@ def main():
         if 'editing_prompt' in st.session_state and st.session_state.editing_prompt == selected_channel:
             if user_role == 'admin':
                 current_prompt = st.session_state.channel_manager.get_channel_prompt(selected_channel)
-                edited_prompt = st.text_area("Edit channel prompt:", value=current_prompt, height=200, key="prompt_editor")
+                edited_prompt = st.text_area("Edit channel prompt:", value=current_prompt, height=400, key="prompt_editor")
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("💾 Save Changes"):
+                    if st.button("💾 Save Changes", key=f"save_prompt_changes_{selected_channel}"):
                         st.session_state.channel_manager.update_channel_prompt(selected_channel, edited_prompt)
                         del st.session_state.editing_prompt
                         st.success("Prompt updated successfully!")
                         st.rerun()
                 
                 with col2:
-                    if st.button("❌ Cancel Edit"):
+                    if st.button("❌ Cancel Edit", key=f"cancel_edit_prompt_{selected_channel}"):
                         del st.session_state.editing_prompt
                         st.rerun()
             else:
