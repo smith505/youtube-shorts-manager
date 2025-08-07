@@ -468,6 +468,22 @@ class ChannelManager:
             pass
         return titles
     
+    def get_used_titles_ordered(self, channel_name: str, force_refresh: bool = False) -> List[str]:
+        """Load used titles for a channel in the same order as they appear in the file."""
+        filename = f"titles_{channel_name.lower()}.txt"
+        
+        try:
+            # Get or create the channel folder
+            channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
+            content = self.drive_manager.read_file(filename, channel_folder_id)
+            if content:
+                # Return as list to preserve order from the file
+                titles_list = [line.strip() for line in content.split('\n') if line.strip()]
+                return titles_list
+        except Exception as e:
+            pass
+        return []
+    
     def add_title(self, channel_name: str, title: str):
         """Add a new title to a channel's Google Drive folder."""
         filename = f"titles_{channel_name.lower()}.txt"
@@ -1070,15 +1086,12 @@ def main():
             with st.expander("🗑️ **Delete Existing Titles**", expanded=True):
                 st.info(f"Click the ❌ button next to any title to delete it from **{selected_channel}**.")
                 
-                # Get current titles
+                # Get current titles in the order they appear in the file
                 try:
-                    current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=False)
+                    titles_list = st.session_state.channel_manager.get_used_titles_ordered(selected_channel, force_refresh=False)
                     
-                    if current_titles:
-                        st.write(f"**{len(current_titles)} titles found:**")
-                        
-                        # Create a container for titles with delete buttons
-                        titles_list = sorted(list(current_titles))
+                    if titles_list:
+                        st.write(f"**{len(titles_list)} titles found (in file order):**")
                         
                         # Show titles in groups of 5 for better organization
                         for i in range(0, len(titles_list), 5):
