@@ -197,6 +197,20 @@ class UserManager:
         }
     
     
+    def delete_user(self, email: str) -> dict:
+        """Delete a user account (admin only)."""
+        email = email.lower()
+        
+        if email not in self.users:
+            return {"success": False, "error": "User not found"}
+        
+        # Remove the user
+        user_name = self.users[email]['first_name']
+        del self.users[email]
+        self.save_users()
+        
+        return {"success": True, "message": f"User {user_name} ({email}) deleted successfully"}
+    
     def get_all_users(self) -> list:
         """Get list of all approved users for admin management."""
         return [
@@ -348,6 +362,36 @@ def show_login_page():
                             st.write(f"**Email:** {user['email']}")
                             st.write(f"**Approved:** {user['approved_at']}")
                             st.write(f"**Status:** {user['status']}")
+                            
+                            # Delete user button
+                            st.markdown("---")
+                            col1, col2 = st.columns([3, 1])
+                            with col2:
+                                if st.button("🗑️ Delete User", key=f"delete_{user['email']}", type="secondary"):
+                                    st.session_state[f"confirm_delete_{user['email']}"] = True
+                                    st.rerun()
+                            
+                            # Confirmation dialog
+                            if st.session_state.get(f"confirm_delete_{user['email']}", False):
+                                st.error(f"⚠️ **Confirm deletion of {user['first_name']} ({user['email']})?**")
+                                col1, col2, col3 = st.columns([1, 1, 2])
+                                with col1:
+                                    if st.button("✅ Yes, Delete", key=f"confirm_yes_{user['email']}", type="primary"):
+                                        result = st.session_state.user_manager.delete_user(user['email'])
+                                        if result["success"]:
+                                            st.success(f"✅ {result['message']}")
+                                            # Clear confirmation state
+                                            if f"confirm_delete_{user['email']}" in st.session_state:
+                                                del st.session_state[f"confirm_delete_{user['email']}"]
+                                            st.rerun()
+                                        else:
+                                            st.error(f"❌ {result['error']}")
+                                with col2:
+                                    if st.button("❌ Cancel", key=f"confirm_no_{user['email']}"):
+                                        # Clear confirmation state
+                                        if f"confirm_delete_{user['email']}" in st.session_state:
+                                            del st.session_state[f"confirm_delete_{user['email']}"]
+                                        st.rerun()
                 else:
                     st.info("No approved users found")
             
