@@ -561,6 +561,7 @@ def main():
     st.title("🎬 YouTube Shorts Manager")
     user_role = current_user.get('role', 'default')
     st.markdown(f"Welcome back, **{current_user['first_name']}**! Role: **{user_role.upper()}**")
+    # Force redeploy - backup method fix
     
     # Logout button in top right
     col1, col2 = st.columns([4, 1])
