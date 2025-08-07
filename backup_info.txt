@@ -1,0 +1,29 @@
+BACKUP INFORMATION
+=================
+
+Original Tkinter Application Backup: app_tkinter_backup.py
+Date Created: 2025-08-07
+Original Features:
+- Tkinter GUI interface
+- Google Drive integration 
+- Channel management with password protection
+- Title extraction and saving
+- Script generation and saving
+- Real-time collaboration support
+
+Files in this backup:
+- app_tkinter_backup.py (complete working Tkinter app)
+- credentials.json (your Google Cloud credentials)
+- token.json (your authentication token)
+
+To revert to Tkinter version:
+1. Delete/rename current app.py
+2. Copy: cp app_tkinter_backup.py app.py
+3. Run: python app.py
+
+Current working features:
+- Channel folders organized in Google Drive
+- Title deduplication working
+- Script saving working  
+- Password protection on prompt editing
+- Real-time sync between multiple users

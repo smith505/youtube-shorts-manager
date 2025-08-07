@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+
+# Google API credentials and tokens
+credentials.json
+token.json
+
+# Streamlit secrets (contains API keys)
+.streamlit/secrets.toml
+
+# User data files
+users.json
+pending_users.json
+approval_emails.txt
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
