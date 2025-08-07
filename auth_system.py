@@ -190,18 +190,30 @@ class UserManager:
     
     
     def delete_user(self, email: str) -> dict:
-        """Delete a user account (admin only)."""
+        """Delete a user account from both approved and pending lists (admin only)."""
         email = email.lower()
+        deleted_from = []
+        user_name = email
         
-        if email not in self.users:
-            return {"success": False, "error": "User not found"}
+        # Check and remove from approved users
+        if email in self.users:
+            user_name = self.users[email]['first_name']
+            del self.users[email]
+            self.save_users()
+            deleted_from.append("approved users")
         
-        # Remove the user
-        user_name = self.users[email]['first_name']
-        del self.users[email]
-        self.save_users()
+        # Check and remove from pending users
+        if email in self.pending:
+            if user_name == email:  # If we didn't get name from approved users
+                user_name = self.pending[email]['first_name']
+            del self.pending[email]
+            self.save_pending()
+            deleted_from.append("pending users")
         
-        return {"success": True, "message": f"User {user_name} ({email}) deleted successfully"}
+        if not deleted_from:
+            return {"success": False, "error": f"User {email} not found in approved or pending lists"}
+        
+        return {"success": True, "message": f"User {user_name} ({email}) deleted from {' and '.join(deleted_from)}"}
     
     def get_all_users(self) -> list:
         """Get list of all approved users for admin management."""
@@ -317,7 +329,7 @@ def show_login_page():
             st.success("✅ Admin access granted")
             
             # Create tabs for different admin functions  
-            approval_tab, users_tab = st.tabs(["👥 Pending Approvals", "👤 All Users"])
+            approval_tab, users_tab, debug_tab = st.tabs(["👥 Pending Approvals", "👤 All Users", "🔧 Debug & Manage"])
             
             with approval_tab:
                 # Show pending users
@@ -393,6 +405,50 @@ def show_login_page():
                 else:
                     st.info("No approved users found")
             
+            
+            with debug_tab:
+                st.subheader("🔧 Debug & User Management")
+                
+                # Show raw user data
+                st.write("**📊 System Status:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Approved Users", len(st.session_state.user_manager.users))
+                with col2:
+                    st.metric("Pending Users", len(st.session_state.user_manager.pending))
+                
+                # Show all users (approved and pending)
+                st.write("**📝 All Users in System:**")
+                
+                # Approved users
+                if st.session_state.user_manager.users:
+                    st.write("**✅ Approved Users:**")
+                    for email, data in st.session_state.user_manager.users.items():
+                        st.write(f"- {data['first_name']} ({email}) - Status: {data.get('status', 'active')}")
+                
+                # Pending users
+                if st.session_state.user_manager.pending:
+                    st.write("**⏳ Pending Users:**")
+                    for email, data in st.session_state.user_manager.pending.items():
+                        st.write(f"- {data['first_name']} ({email}) - Requested: {data['requested_at']}")
+                
+                if not st.session_state.user_manager.users and not st.session_state.user_manager.pending:
+                    st.info("No users found in system")
+                
+                # Manual user deletion by email
+                st.markdown("---")
+                st.subheader("🗑️ Delete User by Email")
+                delete_email = st.text_input("Enter email to delete:", key="manual_delete_email")
+                if st.button("🗑️ Delete User", key="manual_delete_btn"):
+                    if delete_email:
+                        result = st.session_state.user_manager.delete_user(delete_email)
+                        if result["success"]:
+                            st.success(f"✅ {result['message']}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {result['error']}")
+                    else:
+                        st.error("Please enter an email address")
             
             st.markdown("---")
             st.success("💡 **Passwordless System Active!** Users only need email approval to login.")
