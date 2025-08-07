@@ -65,29 +65,51 @@ class GoogleDriveManager:
         """Authenticate with Google Drive API."""
         creds = None
         
-        # Load existing token if available
-        if os.path.exists('token.json'):
-            creds = Credentials.from_authorized_user_file('token.json', self.SCOPES)
-        
-        # If there are no (valid) credentials available, let the user log in
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                if not os.path.exists('credentials.json'):
-                    st.error("credentials.json file not found. Please follow the setup instructions.")
-                    return False
-                
-                flow = InstalledAppFlow.from_client_secrets_file('credentials.json', self.SCOPES)
-                creds = flow.run_local_server(port=8080, open_browser=True)
+        try:
+            # Try to get credentials from Streamlit secrets first
+            if 'GOOGLE_CREDENTIALS' in st.secrets:
+                import json
+                from google.oauth2.credentials import Credentials
+                creds_info = json.loads(st.secrets['GOOGLE_CREDENTIALS'])
+                creds = Credentials.from_authorized_user_info(creds_info, self.SCOPES)
             
-            # Save the credentials for the next run
-            with open('token.json', 'w') as token:
-                token.write(creds.to_json())
-        
-        self.service = build('drive', 'v3', credentials=creds)
-        self.setup_app_folder()
-        return True
+            # Fallback to local files for development
+            elif os.path.exists('token.json'):
+                creds = Credentials.from_authorized_user_file('token.json', self.SCOPES)
+            
+            # If no credentials available, try to create them
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                else:
+                    # Try credentials from secrets first
+                    if 'GOOGLE_CLIENT_CONFIG' in st.secrets:
+                        import json
+                        client_config = json.loads(st.secrets['GOOGLE_CLIENT_CONFIG'])
+                        flow = InstalledAppFlow.from_client_config(client_config, self.SCOPES)
+                        
+                        # For Streamlit Cloud, we'll need a different auth flow
+                        st.error("Google Drive authentication required. Please contact admin to setup credentials.")
+                        return False
+                    
+                    elif os.path.exists('credentials.json'):
+                        flow = InstalledAppFlow.from_client_secrets_file('credentials.json', self.SCOPES)
+                        creds = flow.run_local_server(port=8080, open_browser=True)
+                        
+                        # Save the credentials for the next run
+                        with open('token.json', 'w') as token:
+                            token.write(creds.to_json())
+                    else:
+                        st.error("Google Drive credentials not configured. Please contact admin.")
+                        return False
+            
+            self.service = build('drive', 'v3', credentials=creds)
+            self.setup_app_folder()
+            return True
+            
+        except Exception as e:
+            st.error(f"Failed to authenticate with Google Drive: {str(e)}")
+            return False
     
     def setup_app_folder(self):
         """Create or find the app folder on Google Drive."""
