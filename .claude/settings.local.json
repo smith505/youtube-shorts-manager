@@ -21,7 +21,8 @@
       "Bash(git pull:*)",
       "Bash(tar:*)",
       "Bash(mkdir:*)",
-      "Bash(touch:*)"
+      "Bash(touch:*)",
+      "Bash(wmic:*)"
     ],
     "deny": []
   }

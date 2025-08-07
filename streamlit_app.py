@@ -960,6 +960,7 @@ def main():
                 if new_channel_name.strip():
                     if new_channel_name not in st.session_state.channel_manager.channels:
                         # Show text area for base prompt
+                        clear_all_modals()
                         st.session_state.adding_channel = new_channel_name.strip()
                     else:
                         st.error("Channel already exists!")
@@ -987,6 +988,18 @@ def main():
                     del st.session_state.adding_channel
                     st.rerun()
     
+    # Function to clear all modal states
+    def clear_all_modals():
+        """Clear all open modals/panels to ensure only one is open at a time."""
+        modal_keys = [
+            'editing_prompt', 'add_titles_modal', 'delete_titles_modal', 
+            'clear_titles_confirm', 'clear_scripts_confirm', 'delete_channel_confirm',
+            'adding_channel'
+        ]
+        for key in modal_keys:
+            if key in st.session_state:
+                del st.session_state[key]
+
     # Main content area
     if selected_channel:
         st.header(f"📝 Generate Scripts for: {selected_channel}")
@@ -996,12 +1009,15 @@ def main():
             col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
             with col1:
                 if st.button("✏️ Edit Prompt", key=f"edit_prompt_{selected_channel}"):
+                    clear_all_modals()
                     st.session_state.editing_prompt = selected_channel
             with col2:
                 if st.button("🗑️ Clear Titles", key=f"clear_titles_{selected_channel}"):
+                    clear_all_modals()
                     st.session_state.clear_titles_confirm = selected_channel
             with col3:
                 if st.button("🗑️ Clear Scripts", key=f"clear_scripts_{selected_channel}"):
+                    clear_all_modals()
                     st.session_state.clear_scripts_confirm = selected_channel
             with col4:
                 if st.button("💾 Backup Now", key=f"backup_now_{selected_channel}"):
@@ -1018,12 +1034,15 @@ def main():
                         st.error(f"Backup error: {str(e)}")
             with col5:
                 if st.button("❌ Delete Channel"):
+                    clear_all_modals()
                     st.session_state.delete_channel_confirm = selected_channel
             with col6:
                 if st.button("📝 Add Titles"):
+                    clear_all_modals()
                     st.session_state.add_titles_modal = selected_channel
             with col7:
                 if st.button("🗑️ Delete Titles"):
+                    clear_all_modals()
                     st.session_state.delete_titles_modal = selected_channel
         
         # Handle bulk add titles modal
