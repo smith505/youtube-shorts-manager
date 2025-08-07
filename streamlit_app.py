@@ -962,7 +962,6 @@ def main():
         
         # Admin controls
         if user_role == 'admin':
-            st.write(f"DEBUG: Admin controls visible. User role: {user_role}")  # Temporary debug
             col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
             with col1:
                 if st.button("✏️ Edit Prompt"):
@@ -993,9 +992,7 @@ def main():
                 if st.button("📝 Add Titles"):
                     st.session_state.add_titles_modal = selected_channel
             with col7:
-                st.write("DEBUG: Col7 rendering")  # Debug
                 if st.button("🗑️ Delete Titles"):
-                    st.write("DEBUG: Delete Titles button clicked!")  # Debug
                     st.session_state.delete_titles_modal = selected_channel
         
         # Handle bulk add titles modal
@@ -1071,70 +1068,55 @@ def main():
         if 'delete_titles_modal' in st.session_state and st.session_state.delete_titles_modal == selected_channel:
             st.markdown("---")
             with st.expander("🗑️ **Delete Existing Titles**", expanded=True):
-                st.info("Enter titles to delete (one per line). Titles must match exactly.")
+                st.info(f"Click the ❌ button next to any title to delete it from **{selected_channel}**.")
                 
-                # Text area for entering titles to delete
-                titles_to_delete_text = st.text_area(
-                    "Titles to delete:",
-                    placeholder="Enter titles here, one per line...\n\nExample:\nIn The Matrix (1999), Neo discovers the truth about reality\nIn Inception (2010), Dom Cobb must plant an idea",
-                    height=200,
-                    key="delete_titles_text"
-                )
+                # Get current titles
+                try:
+                    current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=False)
+                    
+                    if current_titles:
+                        st.write(f"**{len(current_titles)} titles found:**")
+                        
+                        # Create a container for titles with delete buttons
+                        titles_list = sorted(list(current_titles))
+                        
+                        # Show titles in groups of 5 for better organization
+                        for i in range(0, len(titles_list), 5):
+                            title_group = titles_list[i:i+5]
+                            
+                            for title in title_group:
+                                col1, col2 = st.columns([10, 1])
+                                with col1:
+                                    st.write(f"• {title}")
+                                with col2:
+                                    if st.button("❌", key=f"delete_{title}_{i}", help=f"Delete: {title}"):
+                                        try:
+                                            success, message = st.session_state.channel_manager.delete_title(selected_channel, title)
+                                            if success:
+                                                st.success(f"✅ Deleted: {title}")
+                                                # Force refresh title cache
+                                                st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ {message}")
+                                        except Exception as e:
+                                            st.error(f"❌ Error deleting title: {str(e)}")
+                            
+                            # Add a separator between groups for readability
+                            if i + 5 < len(titles_list):
+                                st.markdown("---")
+                    
+                    else:
+                        st.info("No titles found in this channel.")
                 
-                col1, col2, col3 = st.columns([1, 1, 2])
-                with col1:
-                    if st.button("🗑️ Delete Titles", type="primary"):
-                        if titles_to_delete_text.strip():
-                            titles_to_delete = [title.strip() for title in titles_to_delete_text.split('\n') if title.strip()]
-                            if titles_to_delete:
-                                try:
-                                    if hasattr(st.session_state.channel_manager, 'bulk_delete_titles'):
-                                        deleted_titles, not_found_titles = st.session_state.channel_manager.bulk_delete_titles(selected_channel, titles_to_delete)
-                                        
-                                        if deleted_titles:
-                                            st.success(f"✅ Deleted {len(deleted_titles)} titles:")
-                                            for title in deleted_titles:
-                                                st.write(f"- {title}")
-                                        
-                                        if not_found_titles:
-                                            st.warning(f"⚠️ {len(not_found_titles)} titles not found:")
-                                            for title in not_found_titles:
-                                                st.write(f"- {title}")
-                                        
-                                        # Force refresh title cache
-                                        st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
-                                        
-                                        # Clear the modal after successful deletion
-                                        if deleted_titles:
-                                            del st.session_state.delete_titles_modal
-                                            st.rerun()
-                                    else:
-                                        st.error("❌ Bulk delete titles functionality not available - please refresh the page")
-                                except Exception as e:
-                                    st.error(f"❌ Error deleting titles: {str(e)}")
-                            else:
-                                st.warning("Please enter at least one title")
-                        else:
-                            st.warning("Please enter some titles to delete")
+                except Exception as e:
+                    st.error(f"❌ Error loading titles: {str(e)}")
                 
-                with col2:
-                    if st.button("❌ Cancel"):
-                        del st.session_state.delete_titles_modal
-                        st.rerun()
-                
-                with col3:
-                    # Show current title count
-                    try:
-                        current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=False)
-                        st.write(f"**Current titles in {selected_channel}: {len(current_titles)}**")
-                        if current_titles:
-                            st.write("**First few titles:**")
-                            for title in list(current_titles)[:3]:
-                                st.write(f"• {title}")
-                            if len(current_titles) > 3:
-                                st.write(f"... and {len(current_titles) - 3} more")
-                    except Exception as e:
-                        st.write(f"**Current titles: Unable to load** ({str(e)})")
+                # Cancel button at the bottom
+                st.markdown("---")
+                if st.button("❌ Close", type="secondary"):
+                    del st.session_state.delete_titles_modal
+                    st.rerun()
         
         # Handle channel deletion confirmation
         if 'delete_channel_confirm' in st.session_state and st.session_state.delete_channel_confirm == selected_channel:
