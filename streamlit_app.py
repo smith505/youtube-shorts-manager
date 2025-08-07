@@ -1201,23 +1201,15 @@ def main():
         st.subheader("🎯 Generate New Script")
         extra_prompt = st.text_input("Extra prompt (optional):", help="Add any specific instructions for this generation")
         
-        # Check if currently generating
-        is_generating = st.session_state.get('generating', False)
-        
-        # Create button with disabled state based on generation status
+        # Create button (no disabled state needed for direct generation)
         generate_button = st.button(
-            "🚀 Generate Script" if not is_generating else "⏳ Generating...", 
+            "🚀 Generate Script", 
             type="primary",
-            disabled=is_generating,
             key="generate_button"
         )
         
-        if generate_button and not is_generating:
-            st.session_state.generating = True
-            st.rerun()  # Force immediate UI update to show disabled button
-        
-        # Process generation if flag is set
-        if st.session_state.get('generating', False):
+        # Process generation only when button is clicked
+        if generate_button:
             try:
                 with st.spinner("🎬 Generating your script... This may take 10-30 seconds..."):
                     try:
@@ -1481,17 +1473,10 @@ def main():
                                 key=f"error_display_{session_id}"
                             )
                 
-                # Clear generating flag and determine if we need to refresh
-                if 'generating' in st.session_state:
-                    del st.session_state.generating
-                    
-                    # For successful generations, don't rerun - show results inline
-                    # For failed generations, rerun to reset state
-                    if not result.get("success", False):
-                        st.rerun()  # Refresh to re-enable the button for failed generations
+                # No need to manage generating flag since we're doing direct generation
             
             except Exception as e:
-                # Ensure button is re-enabled even if an error occurs
+                # Handle errors in direct generation
                 import traceback
                 error_details = traceback.format_exc()
                 
@@ -1509,11 +1494,6 @@ def main():
                     with st.expander("🔍 **Error Details** (Admin Only)", expanded=True):
                         st.text_area("Full error traceback:", value=error_details, height=200, disabled=True)
                         st.write(f"**Error time:** {st.session_state.last_generation_error['timestamp']}")
-                
-                if 'generating' in st.session_state:
-                    del st.session_state.generating
-                # Always rerun on exceptions to re-enable button
-                st.rerun()
     
     else:
         st.info("👈 Select a channel from the sidebar or create a new one to get started!")
