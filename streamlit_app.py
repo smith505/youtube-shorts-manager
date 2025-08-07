@@ -1292,6 +1292,10 @@ def main():
                         except:
                             st.success("✅ Generated script successfully!")
                         
+                        # Debug: Confirm we're about to show the display
+                        if user_role == 'admin':
+                            st.info("🔍 Debug: About to display script content below...")
+                        
                         try:
                             if titles:
                                 st.subheader("📋 Extracted Titles:")
@@ -1305,6 +1309,7 @@ def main():
                         # Debug info for admin
                         if user_role == 'admin':
                             st.caption(f"Debug: Content length: {len(content) if content else 'None'} characters")
+                            st.caption(f"Debug: Content preview: {content[:100] if content else 'No content'}...")
                         
                         # Create expandable section for better organization
                         try:
@@ -1372,6 +1377,10 @@ def main():
                         
                         st.info(f"Session ID: {session_id}")
                         
+                        # Debug: Confirm end of successful generation display
+                        if user_role == 'admin':
+                            st.success("🔍 Debug: Completed successful generation display - script should be visible above")
+                        
                     else:
                         # Generation failed, but still show what we got
                         st.error(f"❌ Generation failed: {result['error']}")
@@ -1390,10 +1399,14 @@ def main():
                                 key=f"error_display_{session_id}"
                             )
                 
-                # Clear generating flag and force UI refresh
+                # Clear generating flag and determine if we need to refresh
                 if 'generating' in st.session_state:
                     del st.session_state.generating
-                    st.rerun()  # Refresh to re-enable the button
+                    
+                    # For successful generations, don't rerun - show results inline
+                    # For failed generations, rerun to reset state
+                    if not result.get("success", False):
+                        st.rerun()  # Refresh to re-enable the button for failed generations
             
             except Exception as e:
                 # Ensure button is re-enabled even if an error occurs
@@ -1417,6 +1430,7 @@ def main():
                 
                 if 'generating' in st.session_state:
                     del st.session_state.generating
+                # Always rerun on exceptions to re-enable button
                 st.rerun()
     
     else:
