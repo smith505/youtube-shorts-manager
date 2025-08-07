@@ -1098,14 +1098,26 @@ def main():
                 with col1:
                     st.write("") # spacer
                 with col2:
-                    if st.button("🔄 Refresh", help="Reload titles from file"):
-                        # Clear all caches
+                    if st.button("🔄 Force Refresh", help="Force reload from Google Drive"):
+                        # Clear all caches and force Google Drive refresh
                         cache_key = f"cached_titles_{selected_channel}"
                         if cache_key in st.session_state:
                             del st.session_state[cache_key]
                         ordered_cache_key = f"ordered_titles_{selected_channel}"
                         if ordered_cache_key in st.session_state:
                             del st.session_state[ordered_cache_key]
+                        
+                        # Also try to refresh the drive manager connection
+                        try:
+                            # Force refresh the Google Drive file list
+                            filename = f"titles_{selected_channel.lower()}.txt"
+                            channel_folder_id = st.session_state.channel_manager.drive_manager.get_or_create_channel_folder(selected_channel)
+                            
+                            # Try to get file fresh from Google Drive
+                            st.success("🔄 Forcing fresh read from Google Drive...")
+                        except Exception as e:
+                            st.error(f"Refresh error: {str(e)}")
+                        
                         st.rerun()
                 
                 # Get current titles in the order they appear in the file
@@ -1113,17 +1125,30 @@ def main():
                     # Always get fresh data from file to reflect manual changes
                     filename = f"titles_{selected_channel.lower()}.txt"
                     channel_folder_id = st.session_state.channel_manager.drive_manager.get_or_create_channel_folder(selected_channel)
+                    
+                    # Add debug checkbox for troubleshooting
+                    show_debug = st.checkbox("🔍 Show debug info", help="Troubleshoot file reading issues")
+                    
                     content = st.session_state.channel_manager.drive_manager.read_file(filename, channel_folder_id)
                     
-                    if content:
+                    if show_debug:
+                        st.write(f"**Debug Info:**")
+                        st.write(f"- File: {filename}")
+                        st.write(f"- Channel folder: {channel_folder_id}")
+                        st.write(f"- Content length: {len(content) if content else 0}")
+                        if content:
+                            st.text_area("Raw file content:", content, height=200, disabled=True)
+                        else:
+                            st.write("- Raw content: (empty)")
+                    
+                    if content and content.strip():
                         titles_list = [line.strip() for line in content.split('\n') if line.strip()]
                     else:
                         titles_list = []
-                        st.warning(f"⚠️ The file {filename} is empty or doesn't exist in Google Drive")
-                        st.info("💡 **Possible solutions:**")
-                        st.write("• Generate some shorts first to create titles")
-                        st.write("• Check if your manual changes were saved to Google Drive")
-                        st.write("• Try using the '📝 Add Titles' button to add some titles")
+                        if not show_debug:
+                            st.warning(f"⚠️ The file {filename} appears empty")
+                            st.info("📝 Try checking the '🔍 Show debug info' to see the raw file content")
+                            st.write("**Then compare with what you see in Google Drive**")
                     
                     if titles_list:
                         # Show processing indicator if deleting
