@@ -249,6 +249,35 @@ class GoogleDriveManager:
         except Exception as e:
             st.error(f"Error getting/creating channel folder for {channel_name}: {str(e)}")
             return self.folder_id  # Fallback to main folder
+    
+    def get_or_create_backup_folder(self, channel_folder_id: str, channel_name: str) -> str:
+        """Get or create a backup folder within a channel folder."""
+        try:
+            backup_folder_name = "Backups"
+            
+            # Search for existing backup folder
+            results = self.service.files().list(
+                q=f"name='{backup_folder_name}' and parents='{channel_folder_id}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                fields="files(id, name)"
+            ).execute()
+            
+            folders = results.get('files', [])
+            
+            if folders:
+                return folders[0]['id']
+            else:
+                # Create new backup folder
+                folder_metadata = {
+                    'name': backup_folder_name,
+                    'mimeType': 'application/vnd.google-apps.folder',
+                    'parents': [channel_folder_id]
+                }
+                folder = self.service.files().create(body=folder_metadata, fields='id').execute()
+                return folder.get('id')
+                
+        except Exception as e:
+            st.error(f"Error getting/creating backup folder for {channel_name}: {str(e)}")
+            return channel_folder_id  # Fallback to channel folder
 
 
 class ClaudeClient:
@@ -465,6 +494,12 @@ class ChannelManager:
             if not channel_folder_id:
                 st.warning("Could not access channel folder for backup")
                 return False
+            
+            # Get or create backup folder within the channel folder
+            backup_folder_id = self.drive_manager.get_or_create_backup_folder(channel_folder_id, channel_name)
+            if not backup_folder_id:
+                st.warning("Could not access backup folder")
+                return False
                 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
@@ -473,14 +508,14 @@ class ChannelManager:
             titles_content = self.drive_manager.read_file(titles_filename, channel_folder_id)
             if titles_content:
                 backup_titles = f"backup_titles_{channel_name.lower()}_{timestamp}.txt"
-                self.drive_manager.write_file(backup_titles, titles_content, channel_folder_id)
+                self.drive_manager.write_file(backup_titles, titles_content, backup_folder_id)
             
             # Backup scripts file
             scripts_filename = f"saved_scripts_{channel_name.lower()}.txt"
             scripts_content = self.drive_manager.read_file(scripts_filename, channel_folder_id)
             if scripts_content:
                 backup_scripts = f"backup_scripts_{channel_name.lower()}_{timestamp}.txt"
-                self.drive_manager.write_file(backup_scripts, scripts_content, channel_folder_id)
+                self.drive_manager.write_file(backup_scripts, scripts_content, backup_folder_id)
             
             return True
         except AttributeError as e:
