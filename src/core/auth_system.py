@@ -463,6 +463,17 @@ def show_login_page():
             import hashlib
             import uuid
             
+            # Check for manual override file first
+            manual_id_file = '.computer_id_override.txt'
+            if os.path.exists(manual_id_file):
+                try:
+                    with open(manual_id_file, 'r') as f:
+                        manual_id = f.read().strip()
+                    if manual_id:
+                        return manual_id, f"MANUAL_OVERRIDE: {manual_id}"
+                except:
+                    pass
+            
             # Start with basic system info
             system_info = f"{platform.node()}-{platform.system()}-{platform.machine()}"
             
@@ -499,6 +510,21 @@ def show_login_page():
                 system_info += f"-{os.environ.get('COMPUTERNAME', '')}"
                 system_info += f"-{os.environ.get('USERNAME', '')}"
                 system_info += f"-{os.environ.get('USERPROFILE', '')}"
+            except:
+                pass
+            
+            # Add a timestamp-based component as final fallback
+            try:
+                import time
+                # Use file modification time of a system file, or creation time as fallback
+                try:
+                    # Try to get a somewhat stable timestamp (like OS install time)
+                    import tempfile
+                    temp_dir = tempfile.gettempdir()
+                    system_info += f"-{hash(temp_dir)}"
+                except:
+                    # Final fallback - use current time (will change each time)
+                    system_info += f"-{int(time.time()) // 3600}"  # Changes every hour
             except:
                 pass
                 
@@ -567,6 +593,37 @@ def show_login_page():
                 st.success(f"Found saved credentials for: {saved_email}")
             else:
                 st.info("No saved credentials found")
+            
+            # Manual override option
+            st.markdown("---")
+            st.write("**🔧 Manual Computer ID Override (if computers have same ID):**")
+            manual_id = st.text_input("Enter unique identifier for this computer:", 
+                                    placeholder="e.g., computer1, laptop, desktop", 
+                                    key="manual_computer_id")
+            if st.button("💾 Set Manual Computer ID", key="set_manual_id"):
+                if manual_id.strip():
+                    try:
+                        with open('.computer_id_override.txt', 'w') as f:
+                            f.write(manual_id.strip())
+                        st.success(f"✅ Manual computer ID set to: {manual_id.strip()}")
+                        st.info("🔄 Please refresh the page to use the new ID")
+                    except Exception as e:
+                        st.error(f"❌ Failed to save manual ID: {e}")
+                else:
+                    st.error("Please enter a unique identifier")
+            
+            # Show if manual override is active
+            if os.path.exists('.computer_id_override.txt'):
+                try:
+                    with open('.computer_id_override.txt', 'r') as f:
+                        current_manual_id = f.read().strip()
+                    st.info(f"🎯 Manual override active: {current_manual_id}")
+                    if st.button("❌ Remove Manual Override", key="remove_manual_id"):
+                        os.remove('.computer_id_override.txt')
+                        st.success("✅ Manual override removed")
+                        st.info("🔄 Please refresh the page")
+                except:
+                    pass
         
         with st.form("login_form"):
             email = st.text_input("Email:", value=saved_email, key="login_email")
