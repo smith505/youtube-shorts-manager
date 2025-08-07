@@ -457,215 +457,87 @@ def show_login_page():
         st.subheader("Login to Your Account")
         
         # Load saved credentials from computer-specific file
-        def get_computer_id():
-            """Generate a unique identifier based on hardware ID (HWID)."""
-            import platform
-            import hashlib
-            import subprocess
+        def get_browser_session_id():
+            """Generate a unique identifier for this browser session."""
+            # Use Streamlit's session state to create a persistent browser-specific ID
+            if 'browser_session_id' not in st.session_state:
+                import uuid
+                import time
+                # Create a unique session ID for this browser
+                browser_id = f"browser_{uuid.uuid4().hex[:12]}_{int(time.time())}"
+                st.session_state.browser_session_id = browser_id
             
-            # Check for manual override file first
-            manual_id_file = '.computer_id_override.txt'
-            if os.path.exists(manual_id_file):
-                try:
-                    with open(manual_id_file, 'r') as f:
-                        manual_id = f.read().strip()
-                    if manual_id:
-                        return manual_id, f"MANUAL_OVERRIDE: {manual_id}"
-                except:
-                    pass
-            
-            # Primary method: Get Windows HWID using wmic
-            hwid_info = ""
-            try:
-                if platform.system() == "Windows":
-                    # Get motherboard serial number
-                    try:
-                        result = subprocess.run(
-                            ["wmic", "baseboard", "get", "serialnumber"],
-                            capture_output=True, text=True, timeout=10
-                        )
-                        if result.returncode == 0:
-                            lines = result.stdout.strip().split('\n')
-                            for line in lines:
-                                line = line.strip()
-                                if line and line != "SerialNumber":
-                                    hwid_info += f"-MB:{line}"
-                                    break
-                    except:
-                        pass
-                    
-                    # Get CPU ID
-                    try:
-                        result = subprocess.run(
-                            ["wmic", "cpu", "get", "processorid"],
-                            capture_output=True, text=True, timeout=10
-                        )
-                        if result.returncode == 0:
-                            lines = result.stdout.strip().split('\n')
-                            for line in lines:
-                                line = line.strip()
-                                if line and line != "ProcessorId":
-                                    hwid_info += f"-CPU:{line}"
-                                    break
-                    except:
-                        pass
-                    
-                    # Get BIOS serial number
-                    try:
-                        result = subprocess.run(
-                            ["wmic", "bios", "get", "serialnumber"],
-                            capture_output=True, text=True, timeout=10
-                        )
-                        if result.returncode == 0:
-                            lines = result.stdout.strip().split('\n')
-                            for line in lines:
-                                line = line.strip()
-                                if line and line != "SerialNumber":
-                                    hwid_info += f"-BIOS:{line}"
-                                    break
-                    except:
-                        pass
-                    
-                    # Get disk drive serial number
-                    try:
-                        result = subprocess.run(
-                            ["wmic", "diskdrive", "get", "serialnumber"],
-                            capture_output=True, text=True, timeout=10
-                        )
-                        if result.returncode == 0:
-                            lines = result.stdout.strip().split('\n')
-                            for line in lines:
-                                line = line.strip()
-                                if line and line != "SerialNumber" and line:
-                                    hwid_info += f"-DISK:{line}"
-                                    break  # Just get first disk
-                    except:
-                        pass
-                        
-            except Exception as e:
-                hwid_info += f"-ERROR:{str(e)}"
-            
-            # Fallback to MAC address if HWID methods fail
-            if not hwid_info or hwid_info == "":
-                try:
-                    import uuid
-                    mac_address = hex(uuid.getnode())[2:]
-                    hwid_info = f"-MAC:{mac_address}"
-                except:
-                    hwid_info = "-FALLBACK:no_hwid"
-            
-            # Add basic system info as secondary identifier
-            try:
-                import getpass
-                system_info = f"{platform.node()}-{getpass.getuser()}-{os.getcwd()}"
-            except:
-                system_info = "unknown-system"
-            
-            # Combine HWID with basic system info
-            full_info = f"HWID{hwid_info}-SYS:{system_info}"
-            
-            # Hash it to create a consistent but anonymous ID
-            computer_id = hashlib.md5(full_info.encode()).hexdigest()[:16]
-            return computer_id, full_info  # Return both for debugging
+            return st.session_state.browser_session_id
         
         def load_saved_credentials():
-            try:
-                computer_id, _ = get_computer_id()
-                filename = f'.remember_me_{computer_id}.json'
-                
-                if os.path.exists(filename):
-                    with open(filename, 'r') as f:
-                        return json.load(f)
-                return {"email": "", "password": "", "remember": False}
-            except:
-                return {"email": "", "password": "", "remember": False}
+            """Load saved credentials from browser session state."""
+            # Check if credentials are saved in this browser session
+            if 'remember_me_credentials' in st.session_state:
+                return st.session_state.remember_me_credentials
+            return {"email": "", "password": "", "remember": False}
         
         def save_credentials(email, password, remember):
+            """Save credentials to browser session state."""
+            if remember:
+                # Save credentials in session state (persists for this browser)
+                st.session_state.remember_me_credentials = {
+                    "email": email,
+                    "password": password, 
+                    "remember": True
+                }
+            else:
+                # Clear saved credentials
+                if 'remember_me_credentials' in st.session_state:
+                    del st.session_state.remember_me_credentials
+        
+        # Clean up old file-based remember me files
+        def cleanup_old_files():
+            import glob
             try:
-                computer_id, _ = get_computer_id()
-                filename = f'.remember_me_{computer_id}.json'
-                
-                data = {"email": email if remember else "", "password": password if remember else "", "remember": remember}
-                with open(filename, 'w') as f:
-                    json.dump(data, f)
-                    
-                # Also clean up old remember_me files if not remembering
-                if not remember:
-                    try:
-                        if os.path.exists(filename):
-                            os.remove(filename)
-                    except:
-                        pass
+                # Remove old remember me files
+                for file in glob.glob('.remember_me*.json'):
+                    os.remove(file)
+                for file in glob.glob('.computer_id_override.txt'):
+                    os.remove(file)
             except:
                 pass
         
-        # Clean up old shared remember_me.json file on first load
-        def cleanup_old_remember_me():
-            try:
-                if os.path.exists('.remember_me.json'):
-                    os.remove('.remember_me.json')
-                    st.info("🔒 Remember me is now computer-specific for better security!")
-            except:
-                pass
+        # Clean up old files on first load
+        cleanup_old_files()
         
-        # Clean up old shared file
-        cleanup_old_remember_me()
-        
-        # Load saved credentials
+        # Load saved credentials from browser session
         saved_creds = load_saved_credentials()
         saved_email = saved_creds.get("email", "")
         saved_password = saved_creds.get("password", "")
         saved_remember = saved_creds.get("remember", False)
         
-        # Debug info (remove in production)
-        if st.checkbox("🔍 Show debug info", key="show_debug_remember"):
-            computer_id, system_info = get_computer_id()
-            st.code(f"Computer ID: {computer_id}")
-            st.code(f"Remember me file: .remember_me_{computer_id}.json")
-            st.code(f"Working directory: {os.getcwd()}")
-            with st.expander("Full system info used for ID"):
-                st.code(system_info)
+        # Debug info
+        if st.checkbox("🔍 Show browser session debug info", key="show_debug_remember"):
+            browser_id = get_browser_session_id()
+            st.code(f"Browser Session ID: {browser_id}")
+            st.info("💡 Remember me now works per browser session (like normal websites)")
             if saved_email:
                 st.success(f"Found saved credentials for: {saved_email}")
             else:
-                st.info("No saved credentials found")
+                st.info("No saved credentials found in this browser session")
             
-            # Manual override option
-            st.markdown("---")
-            st.write("**🔧 Manual Computer ID Override (if computers have same ID):**")
-            manual_id = st.text_input("Enter unique identifier for this computer:", 
-                                    placeholder="e.g., computer1, laptop, desktop", 
-                                    key="manual_computer_id")
-            if st.button("💾 Set Manual Computer ID", key="set_manual_id"):
-                if manual_id.strip():
-                    try:
-                        with open('.computer_id_override.txt', 'w') as f:
-                            f.write(manual_id.strip())
-                        st.success(f"✅ Manual computer ID set to: {manual_id.strip()}")
-                        st.info("🔄 Please refresh the page to use the new ID")
-                    except Exception as e:
-                        st.error(f"❌ Failed to save manual ID: {e}")
+            # Show session state info
+            with st.expander("Session state info"):
+                if 'remember_me_credentials' in st.session_state:
+                    st.write("✅ Credentials saved in browser session")
                 else:
-                    st.error("Please enter a unique identifier")
-            
-            # Show if manual override is active
-            if os.path.exists('.computer_id_override.txt'):
-                try:
-                    with open('.computer_id_override.txt', 'r') as f:
-                        current_manual_id = f.read().strip()
-                    st.info(f"🎯 Manual override active: {current_manual_id}")
-                    if st.button("❌ Remove Manual Override", key="remove_manual_id"):
-                        os.remove('.computer_id_override.txt')
-                        st.success("✅ Manual override removed")
-                        st.info("🔄 Please refresh the page")
-                except:
-                    pass
+                    st.write("❌ No credentials saved")
+                
+                if st.button("🗑️ Clear Browser Session", key="clear_session"):
+                    st.session_state.clear()
+                    st.success("✅ Browser session cleared")
+                    st.info("🔄 Please refresh the page")
         
         with st.form("login_form"):
             email = st.text_input("Email:", value=saved_email, key="login_email")
             password = st.text_input("Password:", type="password", value=saved_password, key="login_password")
-            remember_me = st.checkbox("Remember me on this computer", value=saved_remember, key="remember_me", 
-                                    help="Credentials are saved locally and specific to this computer only")
+            remember_me = st.checkbox("Remember me", value=saved_remember, key="remember_me", 
+                                    help="Keep me logged in on this browser")
             login_button = st.form_submit_button("🔑 Login", type="primary")
             
             if login_button:
