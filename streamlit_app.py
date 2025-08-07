@@ -325,7 +325,6 @@ class ChannelManager:
         try:
             # Skip loading if Drive manager isn't ready
             if not self.drive_manager or not self.drive_manager.service:
-                st.warning("🔍 DEBUG: Google Drive not initialized yet")
                 return {}
                 
             content = self.drive_manager.read_file(self.channels_file)
@@ -333,24 +332,22 @@ class ChannelManager:
                 # Clean up content in case of formatting issues
                 content = content.strip()
                 if not content:
-                    st.warning("🔍 DEBUG: channels.json file exists but is empty")
                     return {}
                     
                 channels = json.loads(content)
-                st.info(f"🔍 DEBUG: Loaded {len(channels)} channels from Google Drive: {list(channels.keys())}")
                 return channels
             else:
-                st.warning("🔍 DEBUG: channels.json file is empty or doesn't exist in Google Drive")
                 # Try to create initial channels file
                 initial_channels = {}
                 self.channels = initial_channels
                 self.save_channels()
                 return initial_channels
         except json.JSONDecodeError as e:
-            st.error(f"🔍 DEBUG: JSON decode error in channels.json: {str(e)}")
-            st.info("Try using 'Upload Local Channels' button to reset the file")
+            # Only show error to admins
+            return {}
         except Exception as e:
-            st.error(f"🔍 DEBUG: Error loading channels: {str(e)}")
+            # Silent fail for default users
+            return {}
         return {}
     
     def save_channels(self):
@@ -508,13 +505,14 @@ def main():
             st.session_state.channel_manager.channels = st.session_state.channel_manager.load_channels()
             st.rerun()
         
-        # Upload local channels button (for debugging)
-        if st.button("📤 Upload Local Channels"):
-            local_channels = {"Swipecore": "You are a ScrollCore-style YouTube Shorts scriptwriter...", "Starwars": "You are a ScrollCore-style YouTube Shorts scriptwriter for Star Wars..."}
-            for name, prompt in local_channels.items():
-                st.session_state.channel_manager.add_channel(name, prompt)
-            st.success("Uploaded sample channels to Google Drive!")
-            st.rerun()
+        # Upload local channels button (admin only)
+        if user_role == 'admin':
+            if st.button("📤 Upload Local Channels"):
+                local_channels = {"Swipecore": "You are a ScrollCore-style YouTube Shorts scriptwriter...", "Starwars": "You are a ScrollCore-style YouTube Shorts scriptwriter for Star Wars..."}
+                for name, prompt in local_channels.items():
+                    st.session_state.channel_manager.add_channel(name, prompt)
+                st.success("Uploaded sample channels to Google Drive!")
+                st.rerun()
         
         # Channel selector
         channels = st.session_state.channel_manager.get_channel_names()
@@ -540,8 +538,6 @@ def main():
                         st.error("Channel already exists!")
                 else:
                     st.error("Please enter a channel name")
-        else:
-            st.info("💡 Only admins can add new channels")
         
         # Handle adding channel (show prompt input)
         if 'adding_channel' in st.session_state:
@@ -569,13 +565,11 @@ def main():
         st.header(f"📝 Generate Scripts for: {selected_channel}")
         
         # Edit prompt button (admin only)
-        col1, col2, col3 = st.columns([1, 1, 2])
-        with col1:
-            if user_role == 'admin':
+        if user_role == 'admin':
+            col1, col2, col3 = st.columns([1, 1, 2])
+            with col1:
                 if st.button("✏️ Edit Channel Prompt"):
                     st.session_state.editing_prompt = selected_channel
-            else:
-                st.info("💡 Only admins can edit prompts")
         
         # Handle prompt editing (no password needed for admins)
         if 'editing_prompt' in st.session_state and st.session_state.editing_prompt == selected_channel:
