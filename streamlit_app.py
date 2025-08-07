@@ -444,16 +444,26 @@ class ChannelManager:
             return True
         return False
     
-    def get_used_titles(self, channel_name: str) -> Set[str]:
+    def get_used_titles(self, channel_name: str, force_refresh: bool = False) -> Set[str]:
         """Load used titles for a channel from Google Drive channel folder."""
         filename = f"titles_{channel_name.lower()}.txt"
         titles = set()
+        
+        # Cache key for this channel's titles
+        cache_key = f"cached_titles_{channel_name}"
+        
+        # Use cache unless force_refresh is True
+        if not force_refresh and cache_key in st.session_state:
+            return st.session_state[cache_key]
+        
         try:
             # Get or create the channel folder
             channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
             content = self.drive_manager.read_file(filename, channel_folder_id)
             if content:
                 titles = {line.strip() for line in content.split('\n') if line.strip()}
+                # Update cache
+                st.session_state[cache_key] = titles
         except Exception as e:
             pass
         return titles
@@ -465,6 +475,14 @@ class ChannelManager:
             # Get or create the channel folder
             channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
             self.drive_manager.append_to_file(filename, f"{title}\n", channel_folder_id)
+            
+            # Update cache immediately after adding
+            cache_key = f"cached_titles_{channel_name}"
+            if cache_key in st.session_state:
+                st.session_state[cache_key].add(title)
+            else:
+                st.session_state[cache_key] = {title}
+                
         except Exception as e:
             st.error(f"Failed to save title for {channel_name} to Google Drive: {str(e)}")
     
@@ -499,6 +517,13 @@ class ChannelManager:
                 titles_content = "\n".join(new_titles) + "\n"
                 self.drive_manager.append_to_file(filename, titles_content, channel_folder_id)
                 
+                # Update cache with new titles
+                cache_key = f"cached_titles_{channel_name}"
+                if cache_key in st.session_state:
+                    st.session_state[cache_key].update(new_titles)
+                else:
+                    st.session_state[cache_key] = set(new_titles)
+                
             return len(new_titles), duplicate_count
             
         except Exception as e:
@@ -526,6 +551,12 @@ class ChannelManager:
             channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
             filename = f"titles_{channel_name.lower()}.txt"
             self.drive_manager.write_file(filename, "", channel_folder_id)
+            
+            # Clear cache
+            cache_key = f"cached_titles_{channel_name}"
+            if cache_key in st.session_state:
+                del st.session_state[cache_key]
+            
             return True
         except Exception as e:
             st.error(f"Failed to clear titles: {str(e)}")
@@ -1101,38 +1132,29 @@ def main():
         if st.session_state.get('generating', False):
             try:
                 with st.spinner("🎬 Generating your script... This may take 10-30 seconds..."):
-                    # Get used titles for exclusion
-                    used_titles = st.session_state.channel_manager.get_used_titles(selected_channel)
+                    # Get used titles for exclusion - FORCE REFRESH to get latest from Google Drive
+                    used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                    
+                    # Debug: Show how many titles we're excluding
+                    if user_role == 'admin':
+                        st.info(f"📊 Loading exclusion list: Found {len(used_titles)} existing titles for {selected_channel}")
                     
                     # Build exclusion list
                     base_prompt = st.session_state.channel_manager.get_channel_prompt(selected_channel)
                     full_prompt = base_prompt
                     
                     if used_titles:
-                        # Create comprehensive exclusion list - AGGRESSIVE MOVIE VARIETY CHECKING
+                        # Create comprehensive exclusion list
                         used_movies = set()
-                        used_franchises = set()
-                        used_keywords = set()
                         used_titles_list = list(used_titles)
                         
-                        # Extract movie names, franchises, and key terms from ALL title formats
+                        # Extract movie names from ALL title formats
                         for title in used_titles_list:
-                            title_lower = title.lower()
-                            
                             # Pattern 1: "In Movie Name (Year)" - extract exact movie
                             match = re.search(r'^In (.+?) \(\d{4}\)', title)
                             if match:
                                 movie_name = match.group(1)
                                 used_movies.add(movie_name)
-                                
-                                # Extract franchise/series keywords
-                                movie_lower = movie_name.lower()
-                                if any(franchise in movie_lower for franchise in ['star wars', 'star trek', 'marvel', 'dc', 'batman', 'superman', 'spider-man', 'x-men', 'avengers', 'iron man', 'captain america', 'thor', 'guardians', 'fast', 'furious', 'mission impossible', 'john wick', 'terminator', 'alien', 'predator', 'matrix', 'lord of the rings', 'hobbit', 'harry potter', 'jurassic']):
-                                    # Extract the franchise name
-                                    for franchise in ['star wars', 'star trek', 'marvel', 'dc', 'batman', 'superman', 'spider-man', 'x-men', 'avengers', 'iron man', 'captain america', 'thor', 'guardians', 'fast', 'furious', 'mission impossible', 'john wick', 'terminator', 'alien', 'predator', 'matrix', 'lord of the rings', 'hobbit', 'harry potter', 'jurassic']:
-                                        if franchise in movie_lower:
-                                            used_franchises.add(franchise.title())
-                                            break
                             
                             # Pattern 2: "Movie Name (Year)" (without "In")
                             elif re.search(r'^([^(]+) \(\d{4}\)', title):
@@ -1147,35 +1169,25 @@ def main():
                                     movie_part = clean_title.split('(')[0].strip()
                                     if len(movie_part) > 3:
                                         used_movies.add(movie_part)
-                            
-                            # Extract key descriptive words to avoid similar topics
-                            words = re.findall(r'\\b[a-zA-Z]{4,}\\b', title_lower)
-                            for word in words:
-                                if word not in ['movie', 'film', 'scene', 'short', 'year', 'when', 'that', 'this', 'they', 'were', 'with', 'from', 'have', 'been', 'their', 'would', 'could', 'should']:
-                                    used_keywords.add(word)
                         
                         # Build comprehensive exclusion prompt
                         exclusion_parts = []
                         
-                        # Show AI the EXACT titles that have been used
+                        # Show AI ALL the EXACT titles that have been used
                         if used_titles_list:
-                            # Limit to most recent 15 titles to avoid prompt being too long
-                            recent_titles = used_titles_list[-15:] if len(used_titles_list) > 15 else used_titles_list
-                            exclusion_parts.append(f"EXISTING TITLES (DO NOT CREATE SIMILAR): {' | '.join(recent_titles)}")
+                            # Show ALL titles to ensure no duplicates
+                            st.session_state.last_loaded_titles = used_titles_list
+                            exclusion_parts.append(f"EXISTING TITLES (NEVER REPEAT THESE): Total {len(used_titles_list)} titles including: {' | '.join(used_titles_list[:20])}")
                         
-                        # Exclude ALL used movies (not just 25)
+                        # Exclude ALL used movies
                         if used_movies:
                             all_movies = list(used_movies)
-                            exclusion_parts.append(f"BANNED MOVIES (DO NOT USE): {', '.join(all_movies)}")
-                        
-                        # Exclude franchises entirely
-                        if used_franchises:
-                            exclusion_parts.append(f"BANNED FRANCHISES (avoid entirely): {', '.join(used_franchises)}")
+                            exclusion_parts.append(f"ALREADY USED MOVIES (DO NOT USE AGAIN): {', '.join(all_movies)}")
                         
                         # Build strong exclusion prompt with more explicit instructions
                         if exclusion_parts:
                             exclusion_text = " | ".join(exclusion_parts)
-                            full_prompt = f"🚫 STRICT ANTI-DUPLICATE ENFORCEMENT: {exclusion_text}. \\n\\nYou have already created {len(used_titles_list)} shorts. You MUST avoid not only the exact movies listed above, but also similar themes, scenes, or concepts. Do NOT create variations or similar stories about the same movies. Choose completely different films, different genres, different decades, different studios. NO SEQUELS, NO SIMILAR SCENES, NO THEMATIC OVERLAP. {base_prompt}"
+                            full_prompt = f"🚫 STRICT NO-DUPLICATE RULE: {exclusion_text}. \\n\\nYou have already created {len(used_titles_list)} shorts. You MUST NOT use any of the movies listed above. Do NOT create variations or different scenes from the same movies. Choose COMPLETELY DIFFERENT films that are NOT in the list above. {base_prompt}"
                         
                         # Add even more aggressive variety instructions
                         full_prompt += f" \\n\\n🎯 VARIETY REQUIREMENTS: Mix different decades (1970s, 1980s, 1990s, 2000s, 2010s, 2020s, and current 2025/recent releases), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries of origin. Avoid any thematic similarities to existing content. \\n\\n🔥 TRENDING PRIORITY: For 2020s-2025 movies, prioritize films featuring currently trending/talked-about actors and actresses (like Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, Jacob Elordi, Jenna Ortega, etc.) as these generate higher engagement and are more likely to go viral."
@@ -1193,7 +1205,12 @@ def main():
                             if used_titles:
                                 st.write(f"**Total existing titles:** {len(used_titles)}")
                                 st.write(f"**Unique movies extracted:** {len(used_movies) if 'used_movies' in locals() else 'N/A'}")
-                                st.write(f"**Franchises detected:** {len(used_franchises) if 'used_franchises' in locals() else 'N/A'}")
+                                # Show sample of actual titles being excluded
+                                with st.expander("View titles being excluded", expanded=False):
+                                    for i, title in enumerate(list(used_titles)[:10], 1):
+                                        st.caption(f"{i}. {title}")
+                                    if len(used_titles) > 10:
+                                        st.caption(f"... and {len(used_titles) - 10} more")
                             # Calculate and show prompt size
                             prompt_length = len(full_prompt)
                             estimated_tokens = prompt_length / 4  # Rough estimate: 1 token ≈ 4 characters
@@ -1208,8 +1225,14 @@ def main():
                         content = result["content"]
                         titles = extract_titles_from_response(content)
                         
+                        # Debug: Show what titles were found
+                        if user_role == 'admin':
+                            st.info(f"🔍 Debug: Extracted {len(titles)} titles from this generation")
+                        
                         for title in titles:
                             st.session_state.channel_manager.add_title(selected_channel, title)
+                            if user_role == 'admin':
+                                st.caption(f"✅ Saved title: {title}")
                         
                         # Save script
                         st.session_state.channel_manager.save_script(selected_channel, content, session_id)
