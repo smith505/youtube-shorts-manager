@@ -69,7 +69,11 @@ class GoogleDriveManager:
             # Try to get credentials from Streamlit secrets first
             if 'GOOGLE_CREDENTIALS' in st.secrets:
                 import json
-                creds_info = json.loads(st.secrets['GOOGLE_CREDENTIALS'])
+                # Handle multiline JSON from secrets
+                creds_str = st.secrets['GOOGLE_CREDENTIALS']
+                # Remove any control characters that might be in the multiline string
+                creds_str = creds_str.replace('\n', '').replace('\r', '').replace('\t', '')
+                creds_info = json.loads(creds_str)
                 creds = Credentials.from_authorized_user_info(creds_info, self.SCOPES)
             
             # Fallback to local files for development
@@ -319,15 +323,32 @@ class ChannelManager:
     def load_channels(self) -> Dict[str, str]:
         """Load channel definitions from Google Drive channels.json."""
         try:
+            # Skip loading if Drive manager isn't ready
+            if not self.drive_manager or not self.drive_manager.service:
+                st.warning("🔍 DEBUG: Google Drive not initialized yet")
+                return {}
+                
             content = self.drive_manager.read_file(self.channels_file)
             if content:
+                # Clean up content in case of formatting issues
+                content = content.strip()
+                if not content:
+                    st.warning("🔍 DEBUG: channels.json file exists but is empty")
+                    return {}
+                    
                 channels = json.loads(content)
                 st.info(f"🔍 DEBUG: Loaded {len(channels)} channels from Google Drive: {list(channels.keys())}")
                 return channels
             else:
                 st.warning("🔍 DEBUG: channels.json file is empty or doesn't exist in Google Drive")
+                # Try to create initial channels file
+                initial_channels = {}
+                self.channels = initial_channels
+                self.save_channels()
+                return initial_channels
         except json.JSONDecodeError as e:
             st.error(f"🔍 DEBUG: JSON decode error in channels.json: {str(e)}")
+            st.info("Try using 'Upload Local Channels' button to reset the file")
         except Exception as e:
             st.error(f"🔍 DEBUG: Error loading channels: {str(e)}")
         return {}
@@ -438,8 +459,23 @@ def main():
         if 'drive_manager' not in st.session_state:
             try:
                 st.session_state.claude_client = ClaudeClient()
-                st.session_state.drive_manager = GoogleDriveManager()
-                st.session_state.channel_manager = ChannelManager(st.session_state.drive_manager)
+                
+                # Try to initialize Google Drive
+                try:
+                    st.session_state.drive_manager = GoogleDriveManager()
+                except Exception as drive_error:
+                    st.warning(f"Google Drive initialization warning: {str(drive_error)}")
+                    st.info("Some features may be limited. Channels will use local storage.")
+                    # Create a dummy drive manager for fallback
+                    st.session_state.drive_manager = None
+                
+                # Initialize channel manager (will work even if Drive fails)
+                if st.session_state.drive_manager:
+                    st.session_state.channel_manager = ChannelManager(st.session_state.drive_manager)
+                else:
+                    st.error("Google Drive not available. Please check credentials.")
+                    return
+                    
             except Exception as e:
                 st.error(f"Failed to initialize services: {str(e)}")
                 st.info("Please check if all secrets are configured correctly.")
