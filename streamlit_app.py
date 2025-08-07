@@ -1083,37 +1083,73 @@ def main():
                     full_prompt = base_prompt
                     
                     if used_titles:
-                        # Create comprehensive exclusion list
+                        # Create comprehensive exclusion list - AGGRESSIVE MOVIE VARIETY CHECKING
                         used_movies = set()
+                        used_franchises = set()
+                        used_keywords = set()
                         used_titles_list = list(used_titles)
                         
-                        # Extract movie names from various title formats
+                        # Extract movie names, franchises, and key terms from ALL title formats
                         for title in used_titles_list:
-                            # Pattern 1: "In Movie Name (Year)"
+                            title_lower = title.lower()
+                            
+                            # Pattern 1: "In Movie Name (Year)" - extract exact movie
                             match = re.search(r'^In (.+?) \(\d{4}\)', title)
                             if match:
-                                used_movies.add(match.group(1))
+                                movie_name = match.group(1)
+                                used_movies.add(movie_name)
+                                
+                                # Extract franchise/series keywords
+                                movie_lower = movie_name.lower()
+                                if any(franchise in movie_lower for franchise in ['star wars', 'star trek', 'marvel', 'dc', 'batman', 'superman', 'spider-man', 'x-men', 'avengers', 'iron man', 'captain america', 'thor', 'guardians', 'fast', 'furious', 'mission impossible', 'john wick', 'terminator', 'alien', 'predator', 'matrix', 'lord of the rings', 'hobbit', 'harry potter', 'jurassic']):
+                                    # Extract the franchise name
+                                    for franchise in ['star wars', 'star trek', 'marvel', 'dc', 'batman', 'superman', 'spider-man', 'x-men', 'avengers', 'iron man', 'captain america', 'thor', 'guardians', 'fast', 'furious', 'mission impossible', 'john wick', 'terminator', 'alien', 'predator', 'matrix', 'lord of the rings', 'hobbit', 'harry potter', 'jurassic']:
+                                        if franchise in movie_lower:
+                                            used_franchises.add(franchise.title())
+                                            break
+                            
                             # Pattern 2: "Movie Name (Year)" (without "In")
                             elif re.search(r'^([^(]+) \(\d{4}\)', title):
                                 match = re.search(r'^([^(]+) \(\d{4}\)', title)
-                                used_movies.add(match.group(1).strip())
-                            # Pattern 3: Any title containing recognizable movie patterns
+                                movie_name = match.group(1).strip()
+                                used_movies.add(movie_name)
+                            
+                            # Pattern 3: Extract any recognizable content
                             else:
-                                # Try to extract movie name from various formats
                                 clean_title = title.replace('In ', '').strip()
                                 if '(' in clean_title and ')' in clean_title:
                                     movie_part = clean_title.split('(')[0].strip()
                                     if len(movie_part) > 3:
                                         used_movies.add(movie_part)
+                            
+                            # Extract key descriptive words to avoid similar topics
+                            words = re.findall(r'\\b[a-zA-Z]{4,}\\b', title_lower)
+                            for word in words:
+                                if word not in ['movie', 'film', 'scene', 'short', 'year', 'when', 'that', 'this', 'they', 'were', 'with', 'from', 'have', 'been', 'their', 'would', 'could', 'should']:
+                                    used_keywords.add(word)
                         
-                        # Include more titles for better exclusion (up to 25 instead of 10)
+                        # Build comprehensive exclusion prompt
+                        exclusion_parts = []
+                        
+                        # Exclude ALL used movies (not just 25)
                         if used_movies:
-                            exclusion_list = ", ".join(list(used_movies)[:25])
-                            full_prompt = f"DO NOT use any of these movies/topics that have already been used: {exclusion_list}. Choose completely different and unique movies/topics. {base_prompt}"
+                            all_movies = list(used_movies)
+                            exclusion_parts.append(f"BANNED MOVIES (DO NOT USE): {', '.join(all_movies)}")
                         
-                        # Also add a general instruction to avoid duplicates
-                        if len(used_titles_list) > 0:
-                            full_prompt += f" IMPORTANT: You have already created {len(used_titles_list)} shorts for this channel. Make sure to choose completely different and unique content."
+                        # Exclude franchises entirely
+                        if used_franchises:
+                            exclusion_parts.append(f"BANNED FRANCHISES (avoid entirely): {', '.join(used_franchises)}")
+                        
+                        # Build strong exclusion prompt
+                        if exclusion_parts:
+                            exclusion_text = " | ".join(exclusion_parts)
+                            full_prompt = f"🚫 STRICT CONTENT VARIETY ENFORCEMENT: {exclusion_text}. You have already created {len(used_titles_list)} shorts. You MUST choose completely different movies, genres, decades, and topics. Prioritize variety - pick movies from different years, different genres, different studios. NO SEQUELS or related content to anything already used. {base_prompt}"
+                        
+                        # Add even more aggressive variety instructions
+                        full_prompt += f" \\n\\n🎯 VARIETY REQUIREMENTS: Mix different decades (1970s, 1980s, 1990s, 2000s, 2010s, 2020s), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries of origin. Avoid any thematic similarities to existing content."
+                    else:
+                        # Even for first generation, encourage variety
+                        full_prompt += " \\n\\n🎯 VARIETY PRIORITY: Ensure maximum variety in your selection. Choose movies from different decades, different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries. Avoid sequels or movies from the same franchise in a single batch."
                     
                     if extra_prompt.strip():
                         full_prompt += " " + extra_prompt.strip()
