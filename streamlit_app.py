@@ -1093,19 +1093,31 @@ def main():
             with st.expander("🗑️ **Delete Existing Titles**", expanded=True):
                 st.info(f"Click the ❌ button next to any title to delete it from **{selected_channel}**.")
                 
+                # Add refresh button
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write("") # spacer
+                with col2:
+                    if st.button("🔄 Refresh", help="Reload titles from file"):
+                        # Clear all caches
+                        cache_key = f"cached_titles_{selected_channel}"
+                        if cache_key in st.session_state:
+                            del st.session_state[cache_key]
+                        ordered_cache_key = f"ordered_titles_{selected_channel}"
+                        if ordered_cache_key in st.session_state:
+                            del st.session_state[ordered_cache_key]
+                        st.rerun()
+                
                 # Get current titles in the order they appear in the file
                 try:
-                    if hasattr(st.session_state.channel_manager, 'get_used_titles_ordered'):
-                        titles_list = st.session_state.channel_manager.get_used_titles_ordered(selected_channel, force_refresh=False)
+                    # Always get fresh data from file to reflect manual changes
+                    filename = f"titles_{selected_channel.lower()}.txt"
+                    channel_folder_id = st.session_state.channel_manager.drive_manager.get_or_create_channel_folder(selected_channel)
+                    content = st.session_state.channel_manager.drive_manager.read_file(filename, channel_folder_id)
+                    if content:
+                        titles_list = [line.strip() for line in content.split('\n') if line.strip()]
                     else:
-                        # Fallback: get titles directly from file to preserve order
-                        filename = f"titles_{selected_channel.lower()}.txt"
-                        channel_folder_id = st.session_state.channel_manager.drive_manager.get_or_create_channel_folder(selected_channel)
-                        content = st.session_state.channel_manager.drive_manager.read_file(filename, channel_folder_id)
-                        if content:
-                            titles_list = [line.strip() for line in content.split('\n') if line.strip()]
-                        else:
-                            titles_list = []
+                        titles_list = []
                     
                     if titles_list:
                         # Show processing indicator if deleting
