@@ -1109,6 +1109,17 @@ def main():
         
         st.markdown("---")
         
+        # Show persistent error if exists
+        if 'last_generation_error' in st.session_state and user_role == 'admin':
+            with st.expander("⚠️ **Last Generation Error** (Admin Only)", expanded=False):
+                error_info = st.session_state.last_generation_error
+                st.error(f"**Error:** {error_info['error']}")
+                st.write(f"**Time:** {error_info['timestamp']}")
+                st.text_area("Full traceback:", value=error_info['traceback'], height=150, disabled=True)
+                if st.button("Clear Error Log"):
+                    del st.session_state.last_generation_error
+                    st.rerun()
+        
         # Script generation
         st.subheader("🎯 Generate New Script")
         extra_prompt = st.text_input("Extra prompt (optional):", help="Add any specific instructions for this generation")
@@ -1132,12 +1143,16 @@ def main():
         if st.session_state.get('generating', False):
             try:
                 with st.spinner("🎬 Generating your script... This may take 10-30 seconds..."):
-                    # Get used titles for exclusion - FORCE REFRESH to get latest from Google Drive
-                    used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
-                    
-                    # Debug: Show how many titles we're excluding
-                    if user_role == 'admin':
-                        st.info(f"📊 Loading exclusion list: Found {len(used_titles)} existing titles for {selected_channel}")
+                    try:
+                        # Get used titles for exclusion - FORCE REFRESH to get latest from Google Drive
+                        used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                        
+                        # Debug: Show how many titles we're excluding
+                        if user_role == 'admin':
+                            st.info(f"📊 Loading exclusion list: Found {len(used_titles)} existing titles for {selected_channel}")
+                    except Exception as titles_error:
+                        st.error(f"❌ Error loading titles: {str(titles_error)}")
+                        used_titles = set()  # Continue with empty set
                     
                     # Build exclusion list
                     base_prompt = st.session_state.channel_manager.get_channel_prompt(selected_channel)
@@ -1217,33 +1232,56 @@ def main():
                             st.write(f"**Prompt length:** {prompt_length} characters (≈{int(estimated_tokens)} tokens)")
                     
                     # Generate script
-                    session_id = str(uuid.uuid4())
-                    result = st.session_state.claude_client.generate_script(full_prompt, session_id)
+                    try:
+                        session_id = str(uuid.uuid4())
+                        result = st.session_state.claude_client.generate_script(full_prompt, session_id)
+                    except Exception as api_error:
+                        st.error(f"❌ API Error: {str(api_error)}")
+                        result = {"success": False, "error": f"API call failed: {str(api_error)}"}
                     
                     if result["success"]:
-                        # Extract and save titles
-                        content = result["content"]
-                        titles = extract_titles_from_response(content)
-                        
-                        # Debug: Show what titles were found
-                        if user_role == 'admin':
-                            st.info(f"🔍 Debug: Extracted {len(titles)} titles from this generation")
-                        
-                        for title in titles:
-                            st.session_state.channel_manager.add_title(selected_channel, title)
+                        try:
+                            # Extract and save titles
+                            content = result["content"]
+                            titles = extract_titles_from_response(content)
+                            
+                            # Debug: Show what titles were found
                             if user_role == 'admin':
-                                st.caption(f"✅ Saved title: {title}")
+                                st.info(f"🔍 Debug: Extracted {len(titles)} titles from this generation")
+                            
+                            for title in titles:
+                                try:
+                                    st.session_state.channel_manager.add_title(selected_channel, title)
+                                    if user_role == 'admin':
+                                        st.caption(f"✅ Saved title: {title}")
+                                except Exception as title_error:
+                                    st.error(f"❌ Failed to save title '{title}': {str(title_error)}")
+                            
+                            # Save script
+                            try:
+                                st.session_state.channel_manager.save_script(selected_channel, content, session_id)
+                            except Exception as script_error:
+                                st.error(f"❌ Failed to save script: {str(script_error)}")
                         
-                        # Save script
-                        st.session_state.channel_manager.save_script(selected_channel, content, session_id)
+                        except Exception as processing_error:
+                            st.error(f"❌ Error processing results: {str(processing_error)}")
+                            # Still show the content even if processing fails
+                            content = result.get("content", "No content available")
+                            titles = []  # Set empty list if processing failed
                         
                         # Display results
-                        st.success(f"✅ Generated script successfully! Found {len(titles)} titles.")
+                        try:
+                            st.success(f"✅ Generated script successfully! Found {len(titles)} titles.")
+                        except:
+                            st.success("✅ Generated script successfully!")
                         
-                        if titles:
-                            st.subheader("📋 Extracted Titles:")
-                            for i, title in enumerate(titles, 1):
-                                st.write(f"{i}. {title}")
+                        try:
+                            if titles:
+                                st.subheader("📋 Extracted Titles:")
+                                for i, title in enumerate(titles, 1):
+                                    st.write(f"{i}. {title}")
+                        except Exception as title_display_error:
+                            st.warning(f"Could not display titles: {str(title_display_error)}")
                         
                         st.subheader("📄 Generated Script:")
                         
@@ -1318,7 +1356,24 @@ def main():
             
             except Exception as e:
                 # Ensure button is re-enabled even if an error occurs
+                import traceback
+                error_details = traceback.format_exc()
+                
+                # Store error in session state so it persists
+                st.session_state.last_generation_error = {
+                    "error": str(e),
+                    "traceback": error_details,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                
                 st.error(f"❌ An unexpected error occurred: {str(e)}")
+                
+                # Show detailed error for admins
+                if user_role == 'admin':
+                    with st.expander("🔍 **Error Details** (Admin Only)", expanded=True):
+                        st.text_area("Full error traceback:", value=error_details, height=200, disabled=True)
+                        st.write(f"**Error time:** {st.session_state.last_generation_error['timestamp']}")
+                
                 if 'generating' in st.session_state:
                     del st.session_state.generating
                 st.rerun()
