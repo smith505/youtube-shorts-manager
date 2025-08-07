@@ -1162,6 +1162,36 @@ def main():
                             st.write("• File permissions issue")
                             st.write("• Google Drive API cache issue")
                             st.write("• File is in wrong folder location")
+                            
+                            st.markdown("---")
+                            st.write("**🔧 Try this fix:**")
+                            if st.button("🔥 Force Recreate File", help="Delete and recreate the titles file", type="primary"):
+                                try:
+                                    # Try to delete the existing file and recreate it
+                                    drive_service = st.session_state.channel_manager.drive_manager.service
+                                    
+                                    # Find and delete the existing file
+                                    existing_files = drive_service.files().list(
+                                        q=f"name='{filename}' and parents='{channel_folder_id}' and trashed=false",
+                                        fields="files(id, name)"
+                                    ).execute()
+                                    
+                                    for file in existing_files.get('files', []):
+                                        drive_service.files().delete(fileId=file['id']).execute()
+                                        st.success(f"🗑️ Deleted corrupted file: {file['name']}")
+                                    
+                                    st.info("📝 Now use the '📝 Add Titles' button to add your titles back")
+                                    st.info("💡 Or generate some scripts to automatically create titles")
+                                    
+                                except Exception as e:
+                                    st.error(f"Failed to recreate file: {str(e)}")
+                            
+                            st.write("**Or manually fix in Google Drive:**")
+                            st.write("1. Go to your Google Drive Swipecore folder")
+                            st.write("2. Delete the existing titles_swipecore.txt file")
+                            st.write("3. Create a new file with the same name")
+                            st.write("4. Add your titles and save")
+                            st.write("5. Come back and try the Force Refresh button")
                     
                     if content and content.strip():
                         titles_list = [line.strip() for line in content.split('\n') if line.strip()]
