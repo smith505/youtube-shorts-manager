@@ -165,7 +165,8 @@ class UserManager:
                     "email": user_data['email'],
                     "password": user_data['password'],
                     "approved_at": datetime.now(),
-                    "status": "active"
+                    "status": "active",
+                    "role": "default"  # New users get default role
                 }
                 del self.pending[email]
                 self.save_users()
@@ -215,7 +216,8 @@ class UserManager:
             "success": True, 
             "user": {
                 "first_name": found_user['first_name'],
-                "email": found_user['email']  # Return original case
+                "email": found_user['email'],  # Return original case
+                "role": found_user.get('role', 'default')  # Include role
             }
         }
     
@@ -261,6 +263,22 @@ class UserManager:
         
         return {"success": True, "message": f"User {user_name} ({actual_email_found}) deleted from {' and '.join(deleted_from)}"}
     
+    def change_user_role(self, email: str, new_role: str) -> dict:
+        """Change a user's role (admin only)."""
+        if new_role not in ['default', 'admin']:
+            return {"success": False, "error": "Invalid role. Must be 'default' or 'admin'"}
+        
+        # Find user with case-insensitive search
+        for user_email in list(self.users.keys()):
+            if user_email.lower() == email.lower():
+                user_name = self.users[user_email]['first_name']
+                # Update the user's role
+                self.users[user_email]['role'] = new_role
+                self.save_users()
+                return {"success": True, "message": f"Role changed to {new_role} for {user_name} ({user_email})"}
+        
+        return {"success": False, "error": f"User {email} not found"}
+    
     def reset_user_password(self, email: str, new_password: str) -> dict:
         """Reset a user's password (admin only)."""
         if len(new_password) < 6:
@@ -284,7 +302,8 @@ class UserManager:
                 "first_name": data['first_name'],
                 "email": email,
                 "approved_at": data.get('approved_at', 'Unknown'),
-                "status": data.get('status', 'active')
+                "status": data.get('status', 'active'),
+                "role": data.get('role', 'default')
             }
             for email, data in self.users.items()
         ]
@@ -455,11 +474,32 @@ def show_login_page():
                     st.subheader("👤 All Approved Users")
                     
                     for user in all_users:
-                        with st.expander(f"{user['first_name']} ({user['email']})"):
+                        with st.expander(f"{user['first_name']} ({user['email']}) - {user['role'].upper()}"):
                             st.write(f"**Name:** {user['first_name']}")
                             st.write(f"**Email:** {user['email']}")
                             st.write(f"**Approved:** {user['approved_at']}")
                             st.write(f"**Status:** {user['status']}")
+                            st.write(f"**Role:** {user['role']}")
+                            
+                            # Role change section
+                            st.markdown("---")
+                            st.write("**Change Role:**")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                new_role = st.selectbox(
+                                    "New role",
+                                    ["default", "admin"],
+                                    index=0 if user['role'] == 'default' else 1,
+                                    key=f"role_{user['email']}"
+                                )
+                            with col2:
+                                if st.button("Update Role", key=f"update_role_{user['email']}"):
+                                    result = st.session_state.user_manager.change_user_role(user['email'], new_role)
+                                    if result["success"]:
+                                        st.success(f"✅ {result['message']}")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ {result['error']}")
                             
                             # Delete user button
                             st.markdown("---")

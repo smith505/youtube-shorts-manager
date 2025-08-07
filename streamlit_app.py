@@ -486,7 +486,8 @@ def main():
         return
     
     st.title("🎬 YouTube Shorts Manager")
-    st.markdown(f"Welcome back, **{current_user['first_name']}**! Generate YouTube Shorts scripts with AI and manage multiple channels")
+    user_role = current_user.get('role', 'default')
+    st.markdown(f"Welcome back, **{current_user['first_name']}**! Role: **{user_role.upper()}**")
     
     # Logout button in top right
     col1, col2 = st.columns([4, 1])
@@ -525,19 +526,22 @@ def main():
         
         st.markdown("---")
         
-        # Add new channel
-        st.subheader("➕ Add New Channel")
-        new_channel_name = st.text_input("Channel Name", key="new_channel_name")
-        
-        if st.button("Add Channel", type="primary"):
-            if new_channel_name.strip():
-                if new_channel_name not in st.session_state.channel_manager.channels:
-                    # Show text area for base prompt
-                    st.session_state.adding_channel = new_channel_name.strip()
+        # Add new channel (admin only)
+        if user_role == 'admin':
+            st.subheader("➕ Add New Channel")
+            new_channel_name = st.text_input("Channel Name", key="new_channel_name")
+            
+            if st.button("Add Channel", type="primary"):
+                if new_channel_name.strip():
+                    if new_channel_name not in st.session_state.channel_manager.channels:
+                        # Show text area for base prompt
+                        st.session_state.adding_channel = new_channel_name.strip()
+                    else:
+                        st.error("Channel already exists!")
                 else:
-                    st.error("Channel already exists!")
-            else:
-                st.error("Please enter a channel name")
+                    st.error("Please enter a channel name")
+        else:
+            st.info("💡 Only admins can add new channels")
         
         # Handle adding channel (show prompt input)
         if 'adding_channel' in st.session_state:
@@ -564,17 +568,18 @@ def main():
     if selected_channel:
         st.header(f"📝 Generate Scripts for: {selected_channel}")
         
-        # Edit prompt button (with password protection)
+        # Edit prompt button (admin only)
         col1, col2, col3 = st.columns([1, 1, 2])
         with col1:
-            if st.button("✏️ Edit Channel Prompt"):
-                st.session_state.editing_prompt = selected_channel
+            if user_role == 'admin':
+                if st.button("✏️ Edit Channel Prompt"):
+                    st.session_state.editing_prompt = selected_channel
+            else:
+                st.info("💡 Only admins can edit prompts")
         
-        # Handle prompt editing
+        # Handle prompt editing (no password needed for admins)
         if 'editing_prompt' in st.session_state and st.session_state.editing_prompt == selected_channel:
-            # Admin password check for editing
-            edit_password = st.text_input("Enter admin password:", type="password", key="edit_password")
-            if edit_password == "admin123":  # Same as admin panel password
+            if user_role == 'admin':
                 current_prompt = st.session_state.channel_manager.get_channel_prompt(selected_channel)
                 edited_prompt = st.text_area("Edit channel prompt:", value=current_prompt, height=200, key="prompt_editor")
                 
@@ -590,8 +595,9 @@ def main():
                     if st.button("❌ Cancel Edit"):
                         del st.session_state.editing_prompt
                         st.rerun()
-            elif edit_password:
-                st.error("Incorrect password")
+            else:
+                st.error("You don't have permission to edit prompts")
+                del st.session_state.editing_prompt
         
         st.markdown("---")
         
