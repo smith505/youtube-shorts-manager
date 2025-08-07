@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 def run_streamlit():
     """Run the Streamlit web application."""
-    os.system('streamlit run src/apps/streamlit_app.py')
+    os.system('streamlit run streamlit_app.py')
 
 def run_tkinter():
     """Run the Tkinter desktop application."""

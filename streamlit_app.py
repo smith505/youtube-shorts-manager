@@ -762,10 +762,6 @@ def extract_titles_from_response(content: str) -> List[str]:
     return titles_found
 
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
 from src.core.auth_system import show_login_page, check_authentication, get_current_user
 
 

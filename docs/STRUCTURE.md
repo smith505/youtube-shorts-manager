@@ -5,8 +5,7 @@
 ```
 Shorts/
 ├── src/                     # Main application code
-│   ├── apps/               # Different app interfaces
-│   │   ├── streamlit_app.py    # Web interface
+│   ├── apps/               # Desktop app interfaces
 │   │   ├── app.py              # Tkinter desktop app
 │   │   └── app_tkinter_backup.py
 │   ├── core/               # Core business logic
@@ -32,6 +31,7 @@ Shorts/
 ├── credentials/            # Authentication files
 │   ├── credentials.json
 │   └── token.json
+├── streamlit_app.py        # Main web interface
 ├── main.py                 # Main entry point
 ├── requirements.txt
 └── README.md
@@ -54,18 +54,18 @@ python main.py --app tkinter
 ### Direct Access
 ```bash
 # Web app
-streamlit run src/apps/streamlit_app.py
+streamlit run streamlit_app.py
 
 # Desktop app (from src/apps/)
-python app.py
+python src/apps/app.py
 ```
 
 ## File Descriptions
 
-### Applications (`src/apps/`)
-- **streamlit_app.py**: Modern web interface using Streamlit
-- **app.py**: Desktop application using Tkinter
-- **app_tkinter_backup.py**: Backup version of desktop app
+### Applications
+- **streamlit_app.py**: Modern web interface using Streamlit (root directory)
+- **src/apps/app.py**: Desktop application using Tkinter
+- **src/apps/app_tkinter_backup.py**: Backup version of desktop app
 
 ### Core Logic (`src/core/`)
 - **auth_system.py**: User authentication and authorization
