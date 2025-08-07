@@ -458,10 +458,10 @@ def show_login_page():
         
         # Load saved credentials from computer-specific file
         def get_computer_id():
-            """Generate a unique identifier for this computer and location."""
+            """Generate a unique identifier based on hardware ID (HWID)."""
             import platform
             import hashlib
-            import uuid
+            import subprocess
             
             # Check for manual override file first
             manual_id_file = '.computer_id_override.txt'
@@ -474,63 +474,99 @@ def show_login_page():
                 except:
                     pass
             
-            # Start with basic system info
-            system_info = f"{platform.node()}-{platform.system()}-{platform.machine()}"
+            # Primary method: Get Windows HWID using wmic
+            hwid_info = ""
+            try:
+                if platform.system() == "Windows":
+                    # Get motherboard serial number
+                    try:
+                        result = subprocess.run(
+                            ["wmic", "baseboard", "get", "serialnumber"],
+                            capture_output=True, text=True, timeout=10
+                        )
+                        if result.returncode == 0:
+                            lines = result.stdout.strip().split('\n')
+                            for line in lines:
+                                line = line.strip()
+                                if line and line != "SerialNumber":
+                                    hwid_info += f"-MB:{line}"
+                                    break
+                    except:
+                        pass
+                    
+                    # Get CPU ID
+                    try:
+                        result = subprocess.run(
+                            ["wmic", "cpu", "get", "processorid"],
+                            capture_output=True, text=True, timeout=10
+                        )
+                        if result.returncode == 0:
+                            lines = result.stdout.strip().split('\n')
+                            for line in lines:
+                                line = line.strip()
+                                if line and line != "ProcessorId":
+                                    hwid_info += f"-CPU:{line}"
+                                    break
+                    except:
+                        pass
+                    
+                    # Get BIOS serial number
+                    try:
+                        result = subprocess.run(
+                            ["wmic", "bios", "get", "serialnumber"],
+                            capture_output=True, text=True, timeout=10
+                        )
+                        if result.returncode == 0:
+                            lines = result.stdout.strip().split('\n')
+                            for line in lines:
+                                line = line.strip()
+                                if line and line != "SerialNumber":
+                                    hwid_info += f"-BIOS:{line}"
+                                    break
+                    except:
+                        pass
+                    
+                    # Get disk drive serial number
+                    try:
+                        result = subprocess.run(
+                            ["wmic", "diskdrive", "get", "serialnumber"],
+                            capture_output=True, text=True, timeout=10
+                        )
+                        if result.returncode == 0:
+                            lines = result.stdout.strip().split('\n')
+                            for line in lines:
+                                line = line.strip()
+                                if line and line != "SerialNumber" and line:
+                                    hwid_info += f"-DISK:{line}"
+                                    break  # Just get first disk
+                    except:
+                        pass
+                        
+            except Exception as e:
+                hwid_info += f"-ERROR:{str(e)}"
             
-            # Add user-specific info
+            # Fallback to MAC address if HWID methods fail
+            if not hwid_info or hwid_info == "":
+                try:
+                    import uuid
+                    mac_address = hex(uuid.getnode())[2:]
+                    hwid_info = f"-MAC:{mac_address}"
+                except:
+                    hwid_info = "-FALLBACK:no_hwid"
+            
+            # Add basic system info as secondary identifier
             try:
                 import getpass
-                system_info += f"-{getpass.getuser()}"
+                system_info = f"{platform.node()}-{getpass.getuser()}-{os.getcwd()}"
             except:
-                pass
+                system_info = "unknown-system"
             
-            # Add current working directory
-            try:
-                system_info += f"-{os.getcwd()}"
-            except:
-                pass
+            # Combine HWID with basic system info
+            full_info = f"HWID{hwid_info}-SYS:{system_info}"
             
-            # Add additional unique identifiers
-            try:
-                # Add processor info
-                system_info += f"-{platform.processor()}"
-            except:
-                pass
-                
-            try:
-                # Add network info - MAC address as unique hardware identifier
-                import uuid
-                mac_address = hex(uuid.getnode())[2:]  # Get MAC address
-                system_info += f"-{mac_address}"
-            except:
-                pass
-                
-            try:
-                # Add environment variables that might be computer-specific
-                system_info += f"-{os.environ.get('COMPUTERNAME', '')}"
-                system_info += f"-{os.environ.get('USERNAME', '')}"
-                system_info += f"-{os.environ.get('USERPROFILE', '')}"
-            except:
-                pass
-            
-            # Add a timestamp-based component as final fallback
-            try:
-                import time
-                # Use file modification time of a system file, or creation time as fallback
-                try:
-                    # Try to get a somewhat stable timestamp (like OS install time)
-                    import tempfile
-                    temp_dir = tempfile.gettempdir()
-                    system_info += f"-{hash(temp_dir)}"
-                except:
-                    # Final fallback - use current time (will change each time)
-                    system_info += f"-{int(time.time()) // 3600}"  # Changes every hour
-            except:
-                pass
-                
             # Hash it to create a consistent but anonymous ID
-            computer_id = hashlib.md5(system_info.encode()).hexdigest()[:16]
-            return computer_id, system_info  # Return both for debugging
+            computer_id = hashlib.md5(full_info.encode()).hexdigest()[:16]
+            return computer_id, full_info  # Return both for debugging
         
         def load_saved_credentials():
             try:
