@@ -752,15 +752,17 @@ def main():
     if user_role == 'admin' and 'channel_manager' in st.session_state:
         current_time = datetime.now()
         if 'last_backup_check' not in st.session_state:
-            st.session_state.last_backup_check = current_time - timedelta(hours=1)
+            st.session_state.last_backup_check = current_time
         
         # Only check every 5 minutes instead of constantly
         if (current_time - st.session_state.last_backup_check).total_seconds() > 300:
             st.session_state.last_backup_check = current_time
             
             for channel_name in st.session_state.channel_manager.get_channel_names():
-                last_backup_time = st.session_state.last_backup.get(channel_name, current_time - timedelta(hours=4))
+                # For new channels, set backup time to now (so next backup is in 3 hours)
+                last_backup_time = st.session_state.last_backup.get(channel_name, current_time)
                 
+                # Only backup if more than 3 hours have passed since last backup
                 if (current_time - last_backup_time) > timedelta(hours=3):
                     with st.spinner(f"Auto-backup for {channel_name}..."):
                         if st.session_state.channel_manager.backup_channel_files(channel_name):

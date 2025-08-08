@@ -887,8 +887,8 @@ def main():
     if 'channel_manager' in st.session_state and st.session_state.channel_manager:
         try:
             for channel_name in st.session_state.channel_manager.get_channel_names():
-                # Get last backup time, default to 4 hours ago to trigger immediate first backup
-                last_backup_time = st.session_state.last_backup.get(channel_name, datetime.now() - timedelta(hours=4))
+                # For new channels, set backup time to now (so next backup is in 3 hours)
+                last_backup_time = st.session_state.last_backup.get(channel_name, datetime.now())
                 
                 # Check if 3 hours have passed since last backup
                 time_since_backup = datetime.now() - last_backup_time
