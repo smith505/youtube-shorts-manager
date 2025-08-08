@@ -312,7 +312,7 @@ class ClaudeClient:
         }
     
     def generate_script(self, prompt: str, session_id: str) -> Dict[str, Any]:
-        """Generate a YouTube short script using Claude API."""
+        """Generate a YouTube short script using Claude API with retry logic."""
         payload = {
             "model": "claude-sonnet-4-20250514",
             "max_tokens": 1000,
@@ -324,49 +324,83 @@ class ClaudeClient:
             ]
         }
         
-        try:
-            response = requests.post(
-                self.base_url,
-                headers=self.headers,
-                json=payload,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
+        # Retry logic for network errors
+        max_retries = 3
+        timeout = 60  # Increased from 30 to 60 seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    self.base_url,
+                    headers=self.headers,
+                    json=payload,
+                    timeout=timeout
+                )
                 
-                # Extract token usage if available
-                usage = data.get("usage", {})
-                input_tokens = usage.get("input_tokens", 0)
-                output_tokens = usage.get("output_tokens", 0)
-                total_tokens = input_tokens + output_tokens
-                
-                return {
-                    "success": True,
-                    "content": data["content"][0]["text"],
-                    "session_id": session_id,
-                    "token_usage": {
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "total_tokens": total_tokens
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Extract token usage if available
+                    usage = data.get("usage", {})
+                    input_tokens = usage.get("input_tokens", 0)
+                    output_tokens = usage.get("output_tokens", 0)
+                    total_tokens = input_tokens + output_tokens
+                    
+                    return {
+                        "success": True,
+                        "content": data["content"][0]["text"],
+                        "session_id": session_id,
+                        "token_usage": {
+                            "input_tokens": input_tokens,
+                            "output_tokens": output_tokens,
+                            "total_tokens": total_tokens
+                        }
                     }
-                }
-            else:
+                else:
+                    # If not a timeout error, don't retry
+                    if response.status_code != 504:
+                        return {
+                            "success": False,
+                            "error": f"API Error {response.status_code}: {response.text}"
+                        }
+                    # Otherwise, continue to retry
+                    
+            except requests.exceptions.Timeout as e:
+                # Timeout error - retry
+                if attempt < max_retries - 1:
+                    st.warning(f"⏱️ Request timed out. Retrying... (Attempt {attempt + 2}/{max_retries})")
+                    time.sleep(2)  # Wait 2 seconds before retrying
+                    continue
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Network timeout after {max_retries} attempts. The API is taking too long to respond. Please try again later."
+                    }
+                    
+            except requests.exceptions.RequestException as e:
+                # Other network errors - retry
+                if attempt < max_retries - 1:
+                    st.warning(f"🔄 Network error. Retrying... (Attempt {attempt + 2}/{max_retries})")
+                    time.sleep(2)
+                    continue
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Network error after {max_retries} attempts: {str(e)}"
+                    }
+                    
+            except Exception as e:
+                # Unexpected errors - don't retry
                 return {
                     "success": False,
-                    "error": f"API Error {response.status_code}: {response.text}"
+                    "error": f"Unexpected error: {str(e)}"
                 }
-                
-        except requests.exceptions.RequestException as e:
-            return {
-                "success": False,
-                "error": f"Network error: {str(e)}"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Unexpected error: {str(e)}"
-            }
+        
+        # Should not reach here, but just in case
+        return {
+            "success": False,
+            "error": "Failed to generate script after all retries"
+        }
 
 
 class ChannelManager:
