@@ -1651,30 +1651,30 @@ def main():
                                     if len(movie_part) > 3:
                                         used_movies.add(movie_part)
                         
-                        # Build comprehensive exclusion prompt
+                        # Build comprehensive exclusion prompt for FACTS only, not movies
                         exclusion_parts = []
                         
-                        # Show AI ALL the EXACT titles that have been used
+                        # Show AI ALL the EXACT titles/facts that have been used
                         if used_titles_list:
-                            # Show ALL titles to ensure no duplicates
+                            # Show ALL titles to ensure no duplicate facts
                             st.session_state.last_loaded_titles = used_titles_list
-                            exclusion_parts.append(f"EXISTING TITLES (NEVER REPEAT THESE): Total {len(used_titles_list)} titles including: {' | '.join(used_titles_list[:20])}")
+                            exclusion_parts.append(f"EXISTING FACTS/SCENES (NEVER REPEAT THESE EXACT FACTS): Total {len(used_titles_list)} facts already used including: {' | '.join(used_titles_list[:20])}")
                         
-                        # Exclude ALL used movies
-                        if used_movies:
-                            all_movies = list(used_movies)
-                            exclusion_parts.append(f"ALREADY USED MOVIES (DO NOT USE AGAIN): {', '.join(all_movies)}")
+                        # NOTE: We're NOT excluding movies anymore - same movies are OK with different facts
+                        # if used_movies:
+                        #     all_movies = list(used_movies)
+                        #     exclusion_parts.append(f"ALREADY USED MOVIES (DO NOT USE AGAIN): {', '.join(all_movies)}")
                         
-                        # Build strong exclusion prompt with more explicit instructions
+                        # Build exclusion prompt focused on fact variety, not movie variety
                         if exclusion_parts:
                             exclusion_text = " | ".join(exclusion_parts)
-                            full_prompt = f"🚫 STRICT NO-DUPLICATE RULE: {exclusion_text}. \\n\\nYou have already created {len(used_titles_list)} shorts. You MUST NOT use any of the movies listed above. Do NOT create variations or different scenes from the same movies. Choose COMPLETELY DIFFERENT films that are NOT in the list above. {base_prompt}"
+                            full_prompt = f"🚫 NO DUPLICATE FACTS RULE: {exclusion_text}. \\n\\nYou have already created {len(used_titles_list)} shorts. You MUST NOT repeat the exact same facts or scenes listed above. However, you CAN use the same movies with DIFFERENT facts, scenes, or behind-the-scenes information. Each fact must be unique and not previously used. {base_prompt}"
                         
-                        # Add even more aggressive variety instructions
-                        full_prompt += f" \\n\\n🎯 VARIETY REQUIREMENTS: Mix different decades (1970s, 1980s, 1990s, 2000s, 2010s, 2020s, and current 2025/recent releases), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries of origin. Avoid any thematic similarities to existing content. \\n\\n🔥 TRENDING PRIORITY: For 2020s-2025 movies, prioritize films featuring currently trending/talked-about actors and actresses (like Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, Jacob Elordi, Jenna Ortega, etc.) as these generate higher engagement and are more likely to go viral."
+                        # Add variety instructions focused on FACT variety, not movie exclusion
+                        full_prompt += f" \\n\\n🎯 FACT VARIETY: You can use the same movies multiple times, but MUST use different facts, scenes, or behind-the-scenes information each time. For example, if 'The Dark Knight (2008)' was used with a fact about the Joker's makeup, you CAN use it again with a different fact about the IMAX cameras, Heath Ledger's preparation, or a different scene detail. Mix facts from different decades (1970s, 1980s, 1990s, 2000s, 2010s, 2020s, and current 2025/recent releases). \\n\\n🔥 TRENDING PRIORITY: For 2020s-2025 movies, prioritize films featuring currently trending/talked-about actors and actresses (like Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, Jacob Elordi, Jenna Ortega, etc.) as these generate higher engagement and are more likely to go viral."
                     else:
-                        # Even for first generation, encourage variety
-                        full_prompt += " \\n\\n🎯 VARIETY PRIORITY: Ensure maximum variety in your selection. Choose movies from different decades (1970s through present day 2025), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), different studios, and different countries. Avoid sequels or movies from the same franchise in a single batch. \\n\\n🔥 TRENDING BOOST: When selecting recent movies (2020s-2025), prioritize films with currently trending/popular actors and actresses (Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, Jacob Elordi, Jenna Ortega, etc.) as these are more engaging and shareable for Gen Z/Alpha audiences."
+                        # Even for first generation, encourage fact variety
+                        full_prompt += " \\n\\n🎯 FACT VARIETY: Feel free to use popular movies multiple times with DIFFERENT facts. Each movie has dozens of interesting facts - use different ones each time. Mix facts from different decades (1970s through present day 2025), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), and different types of facts (production, acting, behind-the-scenes, technical, trivia). \\n\\n🔥 TRENDING BOOST: When selecting recent movies (2020s-2025), prioritize films with currently trending/popular actors and actresses (Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, Jacob Elordi, Jenna Ortega, etc.) as these are more engaging and shareable for Gen Z/Alpha audiences."
                     
                     if extra_prompt.strip():
                         full_prompt += " " + extra_prompt.strip()
