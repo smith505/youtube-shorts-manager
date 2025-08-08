@@ -783,7 +783,7 @@ def main():
         if channels:
             selected_channel = st.selectbox("Select Channel", channels, key="selected_channel")
             
-            # Show backup info for admins (without auto-refresh)
+            # Show backup timer for admins (with detailed countdown)
             if user_role == 'admin' and selected_channel:
                 last_backup = st.session_state.last_backup.get(selected_channel)
                 if last_backup:
@@ -791,6 +791,41 @@ def main():
                     hours = int(time_since.total_seconds() / 3600)
                     minutes = int((time_since.total_seconds() % 3600) / 60)
                     st.caption(f"🕐 Last backup: {hours}h {minutes}m ago")
+                    
+                    # Calculate time until next backup (3 hours from last backup)
+                    next_backup = last_backup + timedelta(hours=3)
+                    time_until = next_backup - datetime.now()
+                    
+                    if time_until.total_seconds() > 0:
+                        hours_until = int(time_until.total_seconds() / 3600)
+                        minutes_until = int((time_until.total_seconds() % 3600) / 60)
+                        seconds_until = int(time_until.total_seconds() % 60)
+                        
+                        # Show countdown with different formats based on time remaining
+                        if hours_until > 0:
+                            st.caption(f"⏰ Next backup in: {hours_until}h {minutes_until}m")
+                        elif minutes_until > 0:
+                            st.caption(f"⏰ Next backup in: {minutes_until}m {seconds_until}s")
+                        else:
+                            st.caption(f"⏰ Next backup in: {seconds_until}s")
+                        
+                        # Progress bar showing time until next backup
+                        progress = (3 * 3600 - time_until.total_seconds()) / (3 * 3600)
+                        st.progress(progress, text="Backup progress")
+                    else:
+                        st.caption("🔄 Backup pending (will run on next refresh)")
+                        st.progress(1.0, text="Backup ready")
+                else:
+                    st.caption("🕐 No backup yet - will run automatically")
+                
+                # Periodic refresh to update timer (every 60 seconds for better performance)
+                if 'last_timer_refresh' not in st.session_state:
+                    st.session_state.last_timer_refresh = datetime.now()
+                
+                time_since_refresh = datetime.now() - st.session_state.last_timer_refresh
+                if time_since_refresh > timedelta(seconds=60):
+                    st.session_state.last_timer_refresh = datetime.now()
+                    st.rerun()
         else:
             selected_channel = None
             st.info("No channels yet. Create one below!")
