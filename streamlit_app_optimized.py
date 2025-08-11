@@ -4,6 +4,11 @@ YouTube Shorts Channel Manager & Script Generator - OPTIMIZED VERSION
 Performance improvements implemented
 """
 
+# Version information
+APP_VERSION = "2.1.0"
+VERSION_DATE = "2024-12-11"
+VERSION_NOTES = "Smart duplicate detection using semantic similarity"
+
 import streamlit as st
 import os
 import json
@@ -23,6 +28,7 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 import asyncio
 import concurrent.futures
+from src.utils.similarity_checker import SimilarityChecker
 
 # Page configuration
 st.set_page_config(
@@ -473,21 +479,32 @@ class ChannelManager:
         return page_titles, total_pages, len(all_titles)
     
     def add_title(self, channel_name: str, title: str):
-        """Add a new title and update cache."""
+        """Add a new title with similarity checking."""
         filename = f"titles_{channel_name.lower()}.txt"
         try:
+            # Check for similar existing titles first
+            existing_titles = self.get_used_titles(channel_name)
+            is_dup, similar_to = SimilarityChecker.is_duplicate_title(title, existing_titles)
+            
+            if is_dup:
+                # Don't add duplicate, but don't show error (silent skip)
+                return False
+            
             channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
             self.drive_manager.append_to_file(filename, f"{title}\n", channel_folder_id)
             
             # Update cache immediately
             if channel_name in self.titles_cache:
                 self.titles_cache[channel_name].add(title)
+            
+            return True
                 
         except Exception as e:
             st.error(f"Failed to save title: {str(e)}")
+            return False
     
     def bulk_add_titles(self, channel_name: str, titles_list: list):
-        """Optimized bulk add with batching."""
+        """Optimized bulk add with similarity-based duplicate detection."""
         if not titles_list:
             return 0, 0
         
@@ -495,28 +512,21 @@ class ChannelManager:
         try:
             existing_titles = self.get_used_titles(channel_name)
             
-            # Use set operations for O(1) duplicate checking
-            new_titles = []
-            duplicate_count = 0
+            # Use similarity checker to filter duplicates
+            unique_titles, duplicates = SimilarityChecker.filter_duplicate_titles(
+                titles_list, existing_titles
+            )
             
-            for title in titles_list:
-                title = title.strip()
-                if title and title not in existing_titles:
-                    new_titles.append(title)
-                    existing_titles.add(title)
-                elif title:
-                    duplicate_count += 1
-            
-            if new_titles:
+            if unique_titles:
                 channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
-                titles_content = "\n".join(new_titles) + "\n"
+                titles_content = "\n".join(unique_titles) + "\n"
                 self.drive_manager.append_to_file(filename, titles_content, channel_folder_id)
                 
                 # Update cache
                 if channel_name in self.titles_cache:
-                    self.titles_cache[channel_name].update(new_titles)
+                    self.titles_cache[channel_name].update(unique_titles)
             
-            return len(new_titles), duplicate_count
+            return len(unique_titles), len(duplicates)
             
         except Exception as e:
             st.error(f"Failed to bulk add titles: {str(e)}")
@@ -729,7 +739,17 @@ def main():
     
     st.title("🎬 YouTube Shorts Manager")
     user_role = current_user.get('role', 'default')
-    st.markdown(f"Welcome back, **{current_user['first_name']}**! Role: **{user_role.upper()}**")
+    
+    # Display version for admin users
+    if user_role == 'admin':
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown(f"Welcome back, **{current_user['first_name']}**! Role: **{user_role.upper()}**")
+        with col2:
+            st.caption(f"v{APP_VERSION} ({VERSION_DATE})")
+            st.caption(f"📝 {VERSION_NOTES}")
+    else:
+        st.markdown(f"Welcome back, **{current_user['first_name']}**! Role: **{user_role.upper()}**")
     
     # Logout button
     col1, col2 = st.columns([4, 1])
@@ -1041,15 +1061,23 @@ def main():
                         content = result.get("content", "")
                         titles = extract_titles_from_response(content)
                         
-                        # Save titles and script
+                        # Save titles and script (with duplicate checking)
+                        added_count = 0
+                        duplicate_count = 0
                         for title in titles:
-                            st.session_state.channel_manager.add_title(selected_channel, title)
+                            if st.session_state.channel_manager.add_title(selected_channel, title):
+                                added_count += 1
+                            else:
+                                duplicate_count += 1
                         
                         user_name = current_user.get('first_name', 'Unknown User')
                         st.session_state.channel_manager.save_script(selected_channel, content, session_id, user_name)
                         
                         # Display results
-                        st.success(f"✅ Generated script with {len(titles)} titles!")
+                        if added_count > 0:
+                            st.success(f"✅ Generated script with {added_count} new unique titles!")
+                        if duplicate_count > 0:
+                            st.info(f"ℹ️ Filtered out {duplicate_count} similar/duplicate titles")
                         
                         if titles:
                             st.subheader("📋 Extracted Titles:")

@@ -26,6 +26,11 @@ Usage:
   Visit the website, enter the password, and start generating shorts!
 """
 
+# Version information
+APP_VERSION = "2.1.0"
+VERSION_DATE = "2024-12-11"
+VERSION_NOTES = "Smart duplicate detection using semantic similarity"
+
 import streamlit as st
 import os
 import json
@@ -42,6 +47,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 import time
 import re
 from datetime import datetime, timedelta
+from src.utils.similarity_checker import SimilarityChecker
 
 # Page configuration
 st.set_page_config(
@@ -519,9 +525,17 @@ class ChannelManager:
         return []
     
     def add_title(self, channel_name: str, title: str):
-        """Add a new title to a channel's Google Drive folder."""
+        """Add a new title with similarity checking."""
         filename = f"titles_{channel_name.lower()}.txt"
         try:
+            # Check for similar existing titles first
+            existing_titles = self.get_used_titles(channel_name, force_refresh=False)
+            is_dup, similar_to = SimilarityChecker.is_duplicate_title(title, existing_titles)
+            
+            if is_dup:
+                # Don't add duplicate, but don't show error (silent skip)
+                return False
+            
             # Get or create the channel folder
             channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
             self.drive_manager.append_to_file(filename, f"{title}\n", channel_folder_id)
@@ -532,12 +546,15 @@ class ChannelManager:
                 st.session_state[cache_key].add(title)
             else:
                 st.session_state[cache_key] = {title}
+            
+            return True
                 
         except Exception as e:
             st.error(f"Failed to save title for {channel_name} to Google Drive: {str(e)}")
+            return False
     
     def bulk_add_titles(self, channel_name: str, titles_list: list):
-        """Bulk add multiple titles to a channel's Google Drive folder."""
+        """Bulk add multiple titles with similarity-based duplicate detection."""
         if not titles_list:
             return 0, 0
             
@@ -546,43 +563,33 @@ class ChannelManager:
             # Get existing titles to avoid duplicates
             existing_titles = self.get_used_titles(channel_name, force_refresh=False)
             
-            # Convert titles_list to set for O(1) duplicate checking within the input
-            titles_set = set()
-            new_titles = []
-            duplicate_count = 0
+            # Use similarity checker to filter duplicates
+            unique_titles, duplicates = SimilarityChecker.filter_duplicate_titles(
+                titles_list, existing_titles
+            )
             
             # Process titles in batches to prevent memory issues
             batch_size = 100
             total_added = 0
             
-            for i in range(0, len(titles_list), batch_size):
-                batch = titles_list[i:i + batch_size]
-                batch_new_titles = []
-                
-                for title in batch:
-                    title = title.strip()
-                    if title and title not in existing_titles and title not in titles_set:
-                        batch_new_titles.append(title)
-                        titles_set.add(title)
-                        existing_titles.add(title)  # Prevent duplicates in subsequent batches
-                    elif title:
-                        duplicate_count += 1
+            for i in range(0, len(unique_titles), batch_size):
+                batch = unique_titles[i:i + batch_size]
                 
                 # Write this batch to Google Drive if there are new titles
-                if batch_new_titles:
+                if batch:
                     channel_folder_id = self.drive_manager.get_or_create_channel_folder(channel_name)
-                    titles_content = "\n".join(batch_new_titles) + "\n"
+                    titles_content = "\n".join(batch) + "\n"
                     self.drive_manager.append_to_file(filename, titles_content, channel_folder_id)
-                    total_added += len(batch_new_titles)
+                    total_added += len(batch)
                     
                     # Update cache with new titles from this batch
                     cache_key = f"cached_titles_{channel_name}"
                     if cache_key in st.session_state:
-                        st.session_state[cache_key].update(batch_new_titles)
+                        st.session_state[cache_key].update(batch)
                     else:
-                        st.session_state[cache_key] = set(batch_new_titles)
+                        st.session_state[cache_key] = set(batch)
             
-            return total_added, duplicate_count
+            return total_added, len(duplicates)
             
         except Exception as e:
             st.error(f"Failed to bulk add titles for {channel_name} to Google Drive: {str(e)}")
@@ -866,8 +873,17 @@ def main():
     
     st.title("🎬 YouTube Shorts Manager")
     user_role = current_user.get('role', 'default')
-    st.markdown(f"Welcome back, **{current_user['first_name']}**! Role: **{user_role.upper()}**")
-    # App version: 2.1 - delete channel fix
+    
+    # Display version for admin users
+    if user_role == 'admin':
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown(f"Welcome back, **{current_user['first_name']}**! Role: **{user_role.upper()}**")
+        with col2:
+            st.caption(f"v{APP_VERSION} ({VERSION_DATE})")
+            st.caption(f"📝 {VERSION_NOTES}")
+    else:
+        st.markdown(f"Welcome back, **{current_user['first_name']}**! Role: **{user_role.upper()}**")
     
     # Logout button in top right
     col1, col2 = st.columns([4, 1])
@@ -1718,13 +1734,26 @@ def main():
                             if user_role == 'admin':
                                 st.info(f"🔍 Debug: Extracted {len(titles)} titles from this generation")
                             
+                            added_count = 0
+                            duplicate_count = 0
                             for title in titles:
                                 try:
-                                    st.session_state.channel_manager.add_title(selected_channel, title)
-                                    if user_role == 'admin':
-                                        st.caption(f"✅ Saved title: {title}")
+                                    if st.session_state.channel_manager.add_title(selected_channel, title):
+                                        added_count += 1
+                                        if user_role == 'admin':
+                                            st.caption(f"✅ Saved title: {title}")
+                                    else:
+                                        duplicate_count += 1
+                                        if user_role == 'admin':
+                                            st.caption(f"ℹ️ Skipped similar title: {title}")
                                 except Exception as title_error:
                                     st.error(f"❌ Failed to save title '{title}': {str(title_error)}")
+                            
+                            # Display summary of title processing
+                            if added_count > 0:
+                                st.success(f"✅ Added {added_count} new unique titles!")
+                            if duplicate_count > 0:
+                                st.info(f"ℹ️ Filtered out {duplicate_count} similar/duplicate titles")
                             
                             # Save script
                             try:
@@ -1741,7 +1770,7 @@ def main():
                         
                         # Display results
                         try:
-                            st.success(f"✅ Generated script successfully! Found {len(titles)} titles.")
+                            st.success(f"✅ Generated script successfully!")
                         except:
                             st.success("✅ Generated script successfully!")
                         
