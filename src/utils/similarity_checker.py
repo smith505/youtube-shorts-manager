@@ -5,7 +5,7 @@ Uses multiple techniques to identify semantically similar titles.
 """
 
 import re
-from typing import Set, Tuple, List
+from typing import Set, Tuple, List, Dict
 from difflib import SequenceMatcher
 
 
@@ -222,6 +222,31 @@ class SimilarityChecker:
         return False
     
     @staticmethod
+    def check_movie_usage(new_title: str, existing_titles: Set[str], max_movie_uses: int = 1) -> Tuple[bool, str]:
+        """
+        Check if this movie has been used too many times already.
+        Returns (should_block, reason)
+        """
+        new_movie, new_fact = SimilarityChecker.extract_movie_and_fact(new_title)
+        
+        if not new_movie:
+            return False, ""  # Don't block if we can't identify the movie
+        
+        # Count how many times this movie has been used
+        movie_count = 0
+        normalized_new_movie = SimilarityChecker.normalize_text(new_movie)
+        
+        for existing_title in existing_titles:
+            existing_movie, _ = SimilarityChecker.extract_movie_and_fact(existing_title)
+            if existing_movie and SimilarityChecker.normalize_text(existing_movie) == normalized_new_movie:
+                movie_count += 1
+        
+        if movie_count >= max_movie_uses:
+            return True, f"Movie '{new_movie}' already used {movie_count} time(s) - maximum is {max_movie_uses}"
+        
+        return False, ""
+    
+    @staticmethod
     def check_movie_topic_diversity(new_title: str, existing_titles: Set[str], max_same_category: int = 1) -> Tuple[bool, str]:
         """
         Check if adding this title would create too many similar topics for the same movie.
@@ -252,12 +277,17 @@ class SimilarityChecker:
     @staticmethod
     def is_duplicate_title(new_title: str, existing_titles: Set[str]) -> Tuple[bool, str]:
         """
-        Enhanced duplicate detection with topic diversity checking.
+        Enhanced duplicate detection with movie usage limits and topic diversity checking.
         Returns (is_duplicate, similar_title_if_found)
         """
         new_movie, new_fact = SimilarityChecker.extract_movie_and_fact(new_title)
         
-        # First check for topic diversity (prevent too many similar topics for same movie)
+        # FIRST: Check if movie has been used too many times (max 1 use per movie)
+        should_block, reason = SimilarityChecker.check_movie_usage(new_title, existing_titles, max_movie_uses=1)
+        if should_block:
+            return True, reason
+        
+        # Then check for topic diversity (prevent too many similar topics for same movie)
         should_block, reason = SimilarityChecker.check_movie_topic_diversity(new_title, existing_titles)
         if should_block:
             return True, reason
@@ -278,6 +308,26 @@ class SimilarityChecker:
                     return True, existing_title
         
         return False, ""
+    
+    @staticmethod
+    def get_used_movies(existing_titles: Set[str]) -> Dict[str, int]:
+        """
+        Get a count of how many times each movie has been used.
+        Returns dict of {movie_name: count}
+        """
+        movie_counts = {}
+        
+        for title in existing_titles:
+            movie, _ = SimilarityChecker.extract_movie_and_fact(title)
+            if movie:
+                normalized_movie = SimilarityChecker.normalize_text(movie)
+                # Store with original casing for display
+                if normalized_movie in movie_counts:
+                    movie_counts[normalized_movie] += 1
+                else:
+                    movie_counts[normalized_movie] = 1
+        
+        return movie_counts
     
     @staticmethod
     def filter_duplicate_titles(new_titles: List[str], existing_titles: Set[str]) -> Tuple[List[str], List[Tuple[str, str]]]:

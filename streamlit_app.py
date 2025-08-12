@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.6.1"
+APP_VERSION = "2.7.0"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "Fixed: Generate only 1 script per request (was 5)"
+VERSION_NOTES = "One movie = One use only (strict movie diversity)"
 
 import streamlit as st
 import os
@@ -1646,9 +1646,10 @@ def main():
                     full_prompt = base_prompt
                     
                     if used_titles:
-                        # Create comprehensive exclusion list
-                        used_movies = set()
+                        # Get movie usage counts using similarity checker
+                        movie_counts = SimilarityChecker.get_used_movies(used_titles)
                         used_titles_list = list(used_titles)
+                        used_movies = set()  # Keep for compatibility
                         
                         # Extract movie names from ALL title formats
                         for title in used_titles_list:
@@ -1714,12 +1715,12 @@ You MUST generate completely different facts that are NOT similar to any of thes
 ===== END OF FACTS FILE =====
 
 STRICT RULES:
-1. Read through ALL the facts above carefully
-2. DO NOT repeat any fact, even with different wording
+1. DO NOT use any movie that appears in the list above - each movie can only be used ONCE
+2. DO NOT repeat any fact, even with different wording  
 3. DO NOT create similar facts (e.g., if "actor improvised scene" exists, don't create "actor ad-libbed dialogue")
-4. If you see multiple facts about the same topic (e.g., multiple "improvisation" facts), AVOID that topic entirely
-5. You CAN use the same movies but MUST use completely different facts
-6. Generate fresh, unique facts not similar to anything in the list above
+4. If a movie appears even once above, pick a DIFFERENT movie
+5. Focus on movies from different decades and genres for variety
+6. Generate fresh facts from COMPLETELY NEW movies not in the list
 """
                             full_prompt = f"{exclusion_text}\\n\\n{base_prompt}"
                         
@@ -1758,8 +1759,8 @@ STRICT RULES:
                     for script_num in range(int(num_scripts)):
                         st.write(f"🔄 Generating script {script_num + 1} of {int(num_scripts)}...")
                         
-                        # Add instruction to generate ONLY ONE script
-                        script_prompt = full_prompt + "\n\n⚠️ CRITICAL: Generate EXACTLY ONE movie fact script. Do not generate multiple scripts."
+                        # Add instruction to generate ONLY ONE script from a NEW movie
+                        script_prompt = full_prompt + "\n\n⚠️ CRITICAL: Generate EXACTLY ONE movie fact script. Do not generate multiple scripts. Use a movie that hasn't been used in any previous facts."
                         if int(num_scripts) > 1:
                             script_prompt += f" Generate unique content different from previous generations."
                         
