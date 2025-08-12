@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.8.1"
+APP_VERSION = "2.8.2"
 VERSION_DATE = "2024-12-12"
-VERSION_NOTES = "Critical fix: More aggressive duplicate prevention to stop AI from reusing banned movies"
+VERSION_NOTES = "Unified prompt structure: Banned list + user prompt combined properly for all scripts"
 
 import streamlit as st
 import os
@@ -1791,30 +1791,38 @@ def main():
                             # Create BANNED MOVIES list first
                             banned_movies_list = "\n".join(sorted(used_movies_with_years)[:200])  # Limit to 200 for token efficiency
                             
-                            # Create strong exclusion prompt with banned movies FIRST
+                            # Create strong exclusion prompt with banned movies FIRST (same format as subsequent scripts)
                             exclusion_text = f"""
-🚫🚫🚫 BANNED MOVIES - DO NOT USE ANY OF THESE 🚫🚫🚫
+🛑🛑🛑 CRITICAL INSTRUCTION - READ THIS FIRST 🛑🛑🛑
 
-These {len(used_movies_with_years)} movies have already been used. Each movie can only be used ONCE.
-DO NOT USE ANY OF THESE MOVIES:
+YOU MUST NOT USE ANY OF THESE {len(used_movies_with_years)} BANNED MOVIES:
 
 {banned_movies_list}
 
-🚫🚫🚫 END OF BANNED MOVIES LIST 🚫🚫🚫
+🚫 THE ABOVE MOVIES ARE COMPLETELY OFF-LIMITS! 🚫
 
-Now here are the existing facts for reference:
+INSTRUCTION: You MUST pick a movie that is NOT in the list above. 
 
-===== EXISTING FACTS =====
-{titles_display[:50]}  
-===== END OF FACTS =====
+Here are some examples of movies you COULD use instead:
+- Arrival (2016)
+- Mad Max: Fury Road (2015)  
+- Get Out (2017)
+- The Grand Budapest Hotel (2014)
+- Moonlight (2016)
+- Parasite (2019)
+- Everything Everywhere All at Once (2022)
+- The Lighthouse (2019)
+- Hereditary (2018)
+- Ex Machina (2014)
 
-CRITICAL RULES:
-1. NEVER use any movie from the BANNED MOVIES list above
-2. Each movie can only be used ONCE - if it's in the banned list, pick a different movie
-3. Generate facts from COMPLETELY NEW movies not in the banned list
-4. Focus on diverse movies from different decades and genres
+CRITICAL: Before writing your response, ask yourself:
+"Is the movie I'm about to use in the BANNED list above?"
+If YES → Pick a different movie
+If NO → Proceed with that movie
+
+REMEMBER: Using a banned movie = AUTOMATIC REJECTION
 """
-                            full_prompt = f"{exclusion_text}\\n\\n{base_prompt}"
+                            full_prompt = f"{exclusion_text}\n\n--- YOUR TASK ---\n\n{base_prompt}"
                         
                         # Add strong movie diversity instructions
                         full_prompt += f" \\n\\n⚠️ MOVIE RULES: NEVER reuse a movie. Each movie gets ONE fact only. Check the BANNED MOVIES list and pick something completely different. Mix facts from different decades (1970s-2020s). \\n\\n🔥 TRENDING: For new picks, consider trending actors (Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, etc.) but ONLY if their movies aren't already used."
@@ -1901,12 +1909,13 @@ If NO → Proceed with that movie
 
 REMEMBER: Using a banned movie = AUTOMATIC REJECTION
 """
-                            script_prompt = f"{exclusion_text}\n\n{base_prompt}"
+                            # Combine: Exclusion text + User's base prompt + Extra prompt
+                            script_prompt = f"{exclusion_text}\n\n--- YOUR TASK ---\n\n{base_prompt}"
                             
                             if extra_prompt.strip():
-                                script_prompt += " " + extra_prompt.strip()
+                                script_prompt += "\n\nAdditional instructions: " + extra_prompt.strip()
                             
-                            script_prompt += " \n\n⚠️ MOVIE RULES: NEVER reuse a movie. Each movie gets ONE fact only. Check the BANNED MOVIES list and pick something completely different."
+                            script_prompt += "\n\n⚠️ MOVIE RULES: NEVER reuse a movie. Each movie gets ONE fact only. Check the BANNED MOVIES list and pick something completely different."
                         else:
                             # First script uses original prompt
                             script_prompt = full_prompt
