@@ -1356,30 +1356,26 @@ def main():
                         if 'delete_page' not in st.session_state:
                             st.session_state.delete_page = 0
                         
-                        total_pages = (len(titles_list) - 1) // items_per_page + 1
-                        current_page = st.session_state.delete_page
+                        total_pages = max(1, (len(titles_list) - 1) // items_per_page + 1)
+                        # Ensure current page is valid
+                        current_page = min(st.session_state.delete_page, total_pages - 1)
+                        if current_page != st.session_state.delete_page:
+                            st.session_state.delete_page = current_page
                         
                         # Pagination controls
-                        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+                        col1, col2, col3, col4 = st.columns([1, 2, 1, 2])
                         with col1:
-                            if st.button("◀ Prev", disabled=current_page == 0):
+                            if st.button("◀ Prev", disabled=current_page == 0, key="prev_page_btn"):
                                 st.session_state.delete_page = max(0, current_page - 1)
                                 st.rerun()
                         with col2:
-                            st.write(f"Page {current_page + 1}/{total_pages}")
+                            st.write(f"Page {current_page + 1} of {total_pages}")
                         with col3:
-                            # Page selector
-                            new_page = st.selectbox("Go to page", range(1, total_pages + 1), 
-                                                   index=current_page, key="page_selector") - 1
-                            if new_page != current_page:
-                                st.session_state.delete_page = new_page
-                                st.rerun()
-                        with col4:
-                            if st.button("Next ▶", disabled=current_page >= total_pages - 1):
+                            if st.button("Next ▶", disabled=current_page >= total_pages - 1, key="next_page_btn"):
                                 st.session_state.delete_page = min(total_pages - 1, current_page + 1)
                                 st.rerun()
-                        with col5:
-                            st.write(f"{len(st.session_state.selected_for_deletion)} selected")
+                        with col4:
+                            st.write(f"**{len(st.session_state.selected_for_deletion)} selected**")
                         
                         # Select/deselect buttons for current page
                         col1, col2, col3 = st.columns([1, 1, 3])
