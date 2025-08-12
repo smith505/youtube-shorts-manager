@@ -1351,24 +1351,65 @@ def main():
                         
                         st.write(f"**{len(titles_list)} titles found (in file order):**")
                         
-                        # Add select/deselect all buttons
-                        col1, col2, col3 = st.columns([1, 1, 3])
+                        # Pagination settings
+                        items_per_page = 50  # Limit to prevent memory issues
+                        if 'delete_page' not in st.session_state:
+                            st.session_state.delete_page = 0
+                        
+                        total_pages = (len(titles_list) - 1) // items_per_page + 1
+                        current_page = st.session_state.delete_page
+                        
+                        # Pagination controls
+                        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
                         with col1:
-                            if st.button("✅ Select All"):
-                                st.session_state.selected_for_deletion = set(titles_list)
+                            if st.button("◀ Prev", disabled=current_page == 0):
+                                st.session_state.delete_page = max(0, current_page - 1)
                                 st.rerun()
                         with col2:
-                            if st.button("❌ Deselect All"):
-                                st.session_state.selected_for_deletion.clear()
+                            st.write(f"Page {current_page + 1}/{total_pages}")
+                        with col3:
+                            # Page selector
+                            new_page = st.selectbox("Go to page", range(1, total_pages + 1), 
+                                                   index=current_page, key="page_selector") - 1
+                            if new_page != current_page:
+                                st.session_state.delete_page = new_page
                                 st.rerun()
+                        with col4:
+                            if st.button("Next ▶", disabled=current_page >= total_pages - 1):
+                                st.session_state.delete_page = min(total_pages - 1, current_page + 1)
+                                st.rerun()
+                        with col5:
+                            st.write(f"{len(st.session_state.selected_for_deletion)} selected")
                         
-                        # Show titles with checkboxes for batch selection
-                        for i, title in enumerate(titles_list):
+                        # Select/deselect buttons for current page
+                        col1, col2, col3 = st.columns([1, 1, 3])
+                        
+                        # Calculate current page items
+                        start_idx = current_page * items_per_page
+                        end_idx = min(start_idx + items_per_page, len(titles_list))
+                        page_titles = titles_list[start_idx:end_idx]
+                        
+                        with col1:
+                            if st.button("✅ Select Page"):
+                                for title in page_titles:
+                                    st.session_state.selected_for_deletion.add(title)
+                                st.rerun()
+                        with col2:
+                            if st.button("❌ Clear Page"):
+                                for title in page_titles:
+                                    st.session_state.selected_for_deletion.discard(title)
+                                st.rerun()
+                        with col3:
+                            st.info(f"Showing {start_idx + 1}-{end_idx} of {len(titles_list)}")
+                        
+                        # Show titles for current page only
+                        for idx, title in enumerate(page_titles):
+                            actual_idx = start_idx + idx
                             col1, col2 = st.columns([1, 10])
                             with col1:
                                 # Use checkbox for selection with proper label
                                 is_selected = title in st.session_state.selected_for_deletion
-                                checkbox_key = f"del_cb_{i}"  # Simple unique key using just index
+                                checkbox_key = f"del_cb_{actual_idx}"  # Unique key using actual index
                                 if st.checkbox("Select", value=is_selected, key=checkbox_key, label_visibility="hidden"):
                                     st.session_state.selected_for_deletion.add(title)
                                 else:
@@ -1379,10 +1420,6 @@ def main():
                                     st.markdown(f"🗑️ ~~{title}~~")
                                 else:
                                     st.write(f"• {title}")
-                            
-                            # Add separator every 10 items for readability
-                            if (i + 1) % 10 == 0 and i + 1 < len(titles_list):
-                                st.markdown("---")
                     
                     else:
                         st.info("No titles found in this channel.")
@@ -1402,6 +1439,8 @@ def main():
                         del st.session_state[processing_start_key]
                     if 'selected_for_deletion' in st.session_state:
                         st.session_state.selected_for_deletion.clear()
+                    if 'delete_page' in st.session_state:
+                        del st.session_state.delete_page
                     del st.session_state.delete_titles_modal
                     st.rerun()
         
