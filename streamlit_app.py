@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.5.0"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "Improved UI + Multi-script generation"
+VERSION_NOTES = "Better duplicate prevention + Full title list to AI"
 
 import streamlit as st
 import os
@@ -1673,23 +1673,33 @@ def main():
                                         used_movies.add(movie_part)
                         
                         # Build comprehensive exclusion prompt for FACTS only, not movies
-                        exclusion_parts = []
-                        
-                        # Show AI ALL the EXACT titles/facts that have been used
                         if used_titles_list:
-                            # Show ALL titles to ensure no duplicate facts
+                            # Show AI ALL the EXACT titles/facts that have been used
                             st.session_state.last_loaded_titles = used_titles_list
-                            exclusion_parts.append(f"EXISTING FACTS/SCENES (NEVER REPEAT THESE EXACT FACTS): Total {len(used_titles_list)} facts already used including: {' | '.join(used_titles_list[:20])}")
-                        
-                        # NOTE: We're NOT excluding movies anymore - same movies are OK with different facts
-                        # if used_movies:
-                        #     all_movies = list(used_movies)
-                        #     exclusion_parts.append(f"ALREADY USED MOVIES (DO NOT USE AGAIN): {', '.join(all_movies)}")
-                        
-                        # Build exclusion prompt focused on fact variety, not movie variety
-                        if exclusion_parts:
-                            exclusion_text = " | ".join(exclusion_parts)
-                            full_prompt = f"🚫 NO DUPLICATE FACTS RULE: {exclusion_text}. \\n\\nYou have already created {len(used_titles_list)} shorts. You MUST NOT repeat the exact same facts or scenes listed above. However, you CAN use the same movies with DIFFERENT facts, scenes, or behind-the-scenes information. Each fact must be unique and not previously used. {base_prompt}"
+                            
+                            # Send ALL titles to prevent duplicates
+                            if len(used_titles_list) <= 50:
+                                # For smaller lists, show all titles
+                                titles_display = ' | '.join(used_titles_list)
+                            else:
+                                # For larger lists, show first 30 and last 20 to give full context
+                                titles_display = ' | '.join(used_titles_list[:30]) + ' | ... | ' + ' | '.join(used_titles_list[-20:])
+                            
+                            # Create strong exclusion prompt
+                            exclusion_text = f"""
+🚫 CRITICAL: You have already created {len(used_titles_list)} facts. You MUST NOT create anything similar to these:
+
+EXISTING FACTS (NEVER REPEAT OR CREATE SIMILAR):
+{titles_display}
+
+STRICT RULES:
+1. DO NOT use the same fact even with different wording
+2. DO NOT use similar facts (e.g., if "Jenna Ortega choreographed dance" exists, don't use "Jenna Ortega created dance moves")
+3. DO NOT repeat themes (if multiple "improvised scene" facts exist, avoid more improvisation facts)
+4. You CAN use the same movie with COMPLETELY DIFFERENT facts
+5. Each fact must be UNIQUE and not similar to any of the {len(used_titles_list)} existing facts above
+"""
+                            full_prompt = f"{exclusion_text}\\n\\n{base_prompt}"
                         
                         # Add variety instructions focused on FACT variety, not movie exclusion
                         full_prompt += f" \\n\\n🎯 FACT VARIETY: You can use the same movies multiple times, but MUST use different facts, scenes, or behind-the-scenes information each time. For example, if 'The Dark Knight (2008)' was used with a fact about the Joker's makeup, you CAN use it again with a different fact about the IMAX cameras, Heath Ledger's preparation, or a different scene detail. Mix facts from different decades (1970s, 1980s, 1990s, 2000s, 2010s, 2020s, and current 2025/recent releases). \\n\\n🔥 TRENDING PRIORITY: For 2020s-2025 movies, prioritize films featuring currently trending/talked-about actors and actresses (like Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, Jacob Elordi, Jenna Ortega, etc.) as these generate higher engagement and are more likely to go viral."

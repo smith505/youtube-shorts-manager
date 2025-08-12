@@ -5,9 +5,9 @@ Performance improvements implemented
 """
 
 # Version information
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.5.0"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "Improved UI + Multi-script generation"
+VERSION_NOTES = "Better duplicate prevention + Full title list to AI"
 
 import streamlit as st
 import os
@@ -1057,17 +1057,38 @@ def main():
                         full_prompt = base_prompt
                         
                         if used_titles:
-                            # Optimize exclusion list building
-                            used_titles_list = list(used_titles)[:100]  # Limit to prevent huge prompts
-                            exclusion_text = f"EXISTING FACTS (DO NOT REPEAT): {' | '.join(used_titles_list[:20])}"
-                            full_prompt = f"🚫 {exclusion_text}\n\n{base_prompt}"
+                            # Send ALL titles to AI to prevent duplicates
+                            used_titles_list = list(used_titles)
+                            
+                            # Group titles for better readability in prompt
+                            if len(used_titles_list) <= 50:
+                                # For smaller lists, show all titles
+                                titles_display = ' | '.join(used_titles_list)
+                            else:
+                                # For larger lists, show first 30 and last 20 to give context
+                                titles_display = ' | '.join(used_titles_list[:30]) + ' | ... | ' + ' | '.join(used_titles_list[-20:])
+                            
+                            # Create comprehensive exclusion prompt
+                            exclusion_text = f"""
+🚫 CRITICAL: You have already created {len(used_titles_list)} facts. You MUST NOT create anything similar to these:
+
+EXISTING FACTS (NEVER REPEAT OR CREATE SIMILAR):
+{titles_display}
+
+RULES:
+1. DO NOT use the same fact even with different wording
+2. DO NOT use similar facts (e.g., if "Jenna Ortega choreographed dance" exists, don't use "Jenna Ortega created dance moves")
+3. You CAN use the same movie with DIFFERENT facts
+4. Each fact must be COMPLETELY DIFFERENT from all {len(used_titles_list)} existing facts above
+"""
+                            full_prompt = f"{exclusion_text}\n\n{base_prompt}"
                         
                         if extra_prompt.strip():
                             full_prompt += " " + extra_prompt.strip()
                         
                         # Add instruction for multiple scripts
                         if int(num_scripts) > 1:
-                            full_prompt += f" Generate unique content different from previous generations."
+                            full_prompt += f"\n\nIMPORTANT: Generate unique content different from previous generations in this session."
                         
                         # Generate script
                         session_id = str(uuid.uuid4())
