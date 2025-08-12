@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.7.1"
+APP_VERSION = "2.7.2"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "Better banned movies list to prevent token waste"
+VERSION_NOTES = "Fixed within-session duplicates by updating banned list after each generation"
 
 import streamlit as st
 import os
@@ -1745,14 +1745,58 @@ CRITICAL RULES:
                     all_generated_scripts = []
                     total_added = 0
                     total_blocked = 0
+                    session_used_movies = set()  # Track movies used in THIS session
                     
                     for script_num in range(int(num_scripts)):
                         st.write(f"🔄 Generating script {script_num + 1} of {int(num_scripts)}...")
                         
-                        # Add final reminder about banned movies
-                        script_prompt = full_prompt + "\n\n⚠️ FINAL REMINDER: Generate EXACTLY ONE movie fact. The movie MUST NOT be in the BANNED MOVIES list shown above. If you're about to use Knives Out, The Menu, Scream, or any movie from the banned list - STOP and pick something else."
-                        if int(num_scripts) > 1:
-                            script_prompt += f" Generate unique content different from previous generations."
+                        # REBUILD prompt for each generation with updated banned list
+                        if script_num > 0:
+                            # Get fresh titles including ones just added
+                            used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                            used_titles_list = list(used_titles)
+                            used_movies_with_years = set()
+                            
+                            # Extract ALL movies (including from this session)
+                            for title in used_titles_list:
+                                movie, _ = SimilarityChecker.extract_movie_and_fact(title)
+                                if movie:
+                                    used_movies_with_years.add(movie)
+                            
+                            # Add session movies
+                            used_movies_with_years.update(session_used_movies)
+                            
+                            # Rebuild the ENTIRE prompt with updated banned list
+                            banned_movies_list = "\n".join(sorted(used_movies_with_years)[:200])
+                            
+                            exclusion_text = f"""
+🚫🚫🚫 BANNED MOVIES - DO NOT USE ANY OF THESE 🚫🚫🚫
+
+These {len(used_movies_with_years)} movies have already been used. Each movie can only be used ONCE.
+DO NOT USE ANY OF THESE MOVIES:
+
+{banned_movies_list}
+
+🚫🚫🚫 END OF BANNED MOVIES LIST 🚫🚫🚫
+
+CRITICAL RULES:
+1. NEVER use any movie from the BANNED MOVIES list above
+2. Each movie can only be used ONCE - if it's in the banned list, pick a different movie
+3. Generate facts from COMPLETELY NEW movies not in the banned list
+4. Focus on diverse movies from different decades and genres
+"""
+                            script_prompt = f"{exclusion_text}\n\n{base_prompt}"
+                            
+                            if extra_prompt.strip():
+                                script_prompt += " " + extra_prompt.strip()
+                            
+                            script_prompt += " \n\n⚠️ MOVIE RULES: NEVER reuse a movie. Each movie gets ONE fact only. Check the BANNED MOVIES list and pick something completely different."
+                        else:
+                            # First script uses original prompt
+                            script_prompt = full_prompt
+                        
+                        # Add final reminder
+                        script_prompt += "\n\n⚠️ FINAL REMINDER: Generate EXACTLY ONE movie fact. The movie MUST NOT be in the BANNED MOVIES list shown above."
                         
                         try:
                             session_id = str(uuid.uuid4())
@@ -1786,6 +1830,10 @@ CRITICAL RULES:
                                         if not is_dup:
                                             if st.session_state.channel_manager.add_title(selected_channel, title):
                                                 added_count += 1
+                                                # Track movie for this session
+                                                movie, _ = SimilarityChecker.extract_movie_and_fact(title)
+                                                if movie:
+                                                    session_used_movies.add(movie)
                                                 if user_role == 'admin':
                                                     st.caption(f"✅ Saved title: {title}")
                                         else:

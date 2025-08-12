@@ -5,9 +5,9 @@ Performance improvements implemented
 """
 
 # Version information
-APP_VERSION = "2.7.1"
+APP_VERSION = "2.7.2"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "Better banned movies list to prevent token waste"
+VERSION_NOTES = "Fixed within-session duplicates by updating banned list after each generation"
 
 import streamlit as st
 import os
@@ -1045,6 +1045,7 @@ def main():
                     all_generated_scripts = []
                     total_added = 0
                     total_blocked = 0
+                    session_used_movies = set()  # Track movies used in THIS session
                     
                     for script_num in range(int(num_scripts)):
                         st.write(f"🔄 Generating script {script_num + 1} of {int(num_scripts)}...")
@@ -1066,6 +1067,9 @@ def main():
                                 movie, _ = SimilarityChecker.extract_movie_and_fact(title)
                                 if movie:
                                     used_movies_with_years.add(movie)
+                            
+                            # ADD movies from current session to banned list
+                            used_movies_with_years.update(session_used_movies)
                             
                             # Smart title selection based on list size
                             if len(used_titles_list) <= 100:
@@ -1142,6 +1146,10 @@ CRITICAL RULES:
                                 if not is_dup:
                                     if st.session_state.channel_manager.add_title(selected_channel, title):
                                         added_count += 1
+                                        # Track movie for this session
+                                        movie, _ = SimilarityChecker.extract_movie_and_fact(title)
+                                        if movie:
+                                            session_used_movies.add(movie)
                                 else:
                                     blocked_titles.append((title, reason))
                                     total_blocked += 1
