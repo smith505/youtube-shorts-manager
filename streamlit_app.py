@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.8.0"
+APP_VERSION = "2.8.1"
 VERSION_DATE = "2024-12-12"
-VERSION_NOTES = "Major improvements: Fixed delete tab issues, added pagination, enhanced duplicate prevention"
+VERSION_NOTES = "Critical fix: More aggressive duplicate prevention to stop AI from reusing banned movies"
 
 import streamlit as st
 import os
@@ -1872,25 +1872,34 @@ CRITICAL RULES:
                             banned_movies_list = "\n".join(sorted(used_movies_with_years)[:200])
                             
                             exclusion_text = f"""
-🚫🚫🚫 CRITICALLY IMPORTANT - BANNED MOVIES LIST 🚫🚫🚫
+🛑🛑🛑 CRITICAL INSTRUCTION - READ THIS FIRST 🛑🛑🛑
 
-ABSOLUTE RULE: Each movie can ONLY be used ONCE. The following {len(used_movies_with_years)} movies are PERMANENTLY BANNED.
-You MUST pick a COMPLETELY DIFFERENT movie that is NOT in this list:
+YOU MUST NOT USE ANY OF THESE {len(used_movies_with_years)} BANNED MOVIES:
 
 {banned_movies_list}
 
-🚫🚫🚫 END OF BANNED LIST - DO NOT USE ANY MOVIE ABOVE 🚫🚫🚫
+🚫 THE ABOVE MOVIES ARE COMPLETELY OFF-LIMITS! 🚫
 
-✅ WHAT TO DO INSTEAD:
-- Pick a movie that is NOT in the banned list above
-- Choose from different decades (70s, 80s, 90s, 2000s, 2010s, 2020s)
-- Vary genres (horror, comedy, drama, action, sci-fi, thriller)
-- Include both mainstream and indie films
-- Consider foreign films and documentaries
+INSTRUCTION: You MUST pick a movie that is NOT in the list above. 
 
-⚠️ VERIFICATION CHECK:
-Before generating your fact, verify the movie you're about to use is NOT in the banned list above.
-If you're thinking of using a popular movie, it's probably already banned - CHECK THE LIST!
+Here are some examples of movies you COULD use instead:
+- Arrival (2016)
+- Mad Max: Fury Road (2015)  
+- Get Out (2017)
+- The Grand Budapest Hotel (2014)
+- Moonlight (2016)
+- Parasite (2019)
+- Everything Everywhere All at Once (2022)
+- The Lighthouse (2019)
+- Hereditary (2018)
+- Ex Machina (2014)
+
+CRITICAL: Before writing your response, ask yourself:
+"Is the movie I'm about to use in the BANNED list above?"
+If YES → Pick a different movie
+If NO → Proceed with that movie
+
+REMEMBER: Using a banned movie = AUTOMATIC REJECTION
 """
                             script_prompt = f"{exclusion_text}\n\n{base_prompt}"
                             
@@ -1902,8 +1911,12 @@ If you're thinking of using a popular movie, it's probably already banned - CHEC
                             # First script uses original prompt
                             script_prompt = full_prompt
                         
-                        # Add final reminder
-                        script_prompt += "\n\n⚠️ FINAL REMINDER: Generate EXACTLY ONE movie fact. The movie MUST NOT be in the BANNED MOVIES list shown above."
+                        # Add MULTIPLE aggressive reminders
+                        script_prompt += "\n\n🛑 STOP! Before you write ANYTHING:\n"
+                        script_prompt += "1. Pick a movie that is NOT in the banned list\n"
+                        script_prompt += "2. Double-check it's not in the banned list\n"
+                        script_prompt += "3. If you're about to use The Thing, The Wicker Man, Taxi Driver, Poltergeist, or Whiplash - STOP! They're BANNED!\n"
+                        script_prompt += "\n⚠️ FINAL WARNING: If you use a banned movie, your response will be REJECTED. Pick something NEW and DIFFERENT!"
                         
                         try:
                             session_id = str(uuid.uuid4())
@@ -1948,6 +1961,11 @@ If you're thinking of using a popular movie, it's probably already banned - CHEC
                                             total_blocked += 1
                                             if user_role == 'admin':
                                                 st.caption(f"🚫 Blocked title: {title} (Reason: {reason})")
+                                            
+                                            # If ALL titles from this script were blocked, show warning
+                                            if len(blocked_titles) == len(titles) and len(titles) > 0:
+                                                st.error(f"⚠️ Script {script_num + 1}: All titles were duplicates! The AI ignored the banned list.")
+                                                # Could add auto-retry here in future
                                     except Exception as title_error:
                                         st.error(f"❌ Failed to process title '{title}': {str(title_error)}")
                                 
