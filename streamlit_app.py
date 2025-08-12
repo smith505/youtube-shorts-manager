@@ -27,8 +27,8 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.9.0"
-VERSION_DATE = "2024-12-12"
+APP_VERSION = "3.0.0"
+VERSION_DATE = "2025-01-12"
 VERSION_NOTES = "Auto-retry when AI uses banned movies - up to 3 attempts with stronger prompts"
 
 import streamlit as st
@@ -1758,77 +1758,41 @@ def main():
                             if movie:
                                 used_movies_with_years.add(movie)
                         
-                        # Build comprehensive exclusion prompt for FACTS only, not movies
+                        # Build comprehensive exclusion prompt with COMPLETE titles file
                         if used_titles_list:
-                            # Show AI the titles intelligently
+                            # Show AI the COMPLETE titles file - no sampling
                             st.session_state.last_loaded_titles = used_titles_list
                             
-                            # Smart title selection based on list size
-                            if len(used_titles_list) <= 100:
-                                # For smaller lists, send all titles
-                                titles_to_send = used_titles_list
-                                titles_display = '\n'.join(titles_to_send)
-                                sampling_note = ""
-                            elif len(used_titles_list) <= 300:
-                                # For medium lists, send most recent 80 + random sample of 20 older ones
-                                recent_titles = used_titles_list[-80:]  # Most recent 80
-                                older_titles = used_titles_list[:-80]
-                                import random
-                                sample_older = random.sample(older_titles, min(20, len(older_titles)))
-                                titles_to_send = sample_older + recent_titles
-                                titles_display = '\n'.join(titles_to_send)
-                                sampling_note = f"\n(Showing {len(titles_to_send)} of {len(used_titles_list)} total titles - focusing on recent ones)"
-                            else:
-                                # For large lists, send most recent 100 + sample of 50 older
-                                recent_titles = used_titles_list[-100:]  # Most recent 100
-                                older_titles = used_titles_list[:-100]
-                                import random
-                                sample_older = random.sample(older_titles, min(50, len(older_titles)))
-                                titles_to_send = sample_older + recent_titles
-                                titles_display = '\n'.join(titles_to_send)
-                                sampling_note = f"\n(Showing {len(titles_to_send)} representative titles from {len(used_titles_list)} total)"
+                            # Pass the COMPLETE list of existing titles from Google Drive
+                            all_existing_titles = "\n".join(used_titles_list)
                             
-                            # Create BANNED MOVIES list first
-                            banned_movies_list = "\n".join(sorted(used_movies_with_years)[:200])  # Limit to 200 for token efficiency
-                            
-                            # Create strong exclusion prompt with banned movies FIRST (same format as subsequent scripts)
+                            # Pass the COMPLETE Google Drive titles file to the AI
                             exclusion_text = f"""
-🛑🛑🛑 CRITICAL INSTRUCTION - READ THIS FIRST 🛑🛑🛑
+🛑🛑🛑 MANDATORY: READ MY GOOGLE DRIVE TITLES FILE 🛑🛑🛑
 
-YOU MUST NOT USE ANY OF THESE {len(used_movies_with_years)} BANNED MOVIES:
+I'm passing you my COMPLETE Google Drive file with ALL {len(used_titles_list)} movie facts.
+This is my entire collection. Every movie below has already been used.
 
-{banned_movies_list}
+===== MY GOOGLE DRIVE TITLES FILE (titles.txt) =====
+{all_existing_titles}
+===== END OF FILE =====
 
-🚫 THE ABOVE MOVIES ARE COMPLETELY OFF-LIMITS! 🚫
+⚠️ CRITICAL RULES:
+1. The file above contains EVERY movie fact I've already created
+2. DO NOT use ANY movie that appears in that file
+3. Each movie can only be used ONCE - if it's in my file, it's BANNED
+4. Before choosing a movie, scan the file to ensure it's not there
+5. Pick a movie that is COMPLETELY ABSENT from my file
 
-INSTRUCTION: You MUST pick a movie that is NOT in the list above. 
-
-Here are some examples of movies you COULD use instead:
-- Arrival (2016)
-- Mad Max: Fury Road (2015)  
-- Get Out (2017)
-- The Grand Budapest Hotel (2014)
-- Moonlight (2016)
-- Parasite (2019)
-- Everything Everywhere All at Once (2022)
-- The Lighthouse (2019)
-- Hereditary (2018)
-- Ex Machina (2014)
-
-CRITICAL: Before writing your response, ask yourself:
-"Is the movie I'm about to use in the BANNED list above?"
-If YES → Pick a different movie
-If NO → Proceed with that movie
-
-REMEMBER: Using a banned movie = AUTOMATIC REJECTION
+🎯 YOUR TASK: Generate a fact about a movie NOT in my Google Drive file above.
 """
-                            full_prompt = f"{exclusion_text}\n\n--- YOUR TASK ---\n\n{base_prompt}"
+                            full_prompt = f"{exclusion_text}\n\n--- USER'S INSTRUCTIONS ---\n\n{base_prompt}"
                         
                         # Add strong movie diversity instructions
-                        full_prompt += f" \\n\\n⚠️ MOVIE RULES: NEVER reuse a movie. Each movie gets ONE fact only. Check the BANNED MOVIES list and pick something completely different. Mix facts from different decades (1970s-2020s). \\n\\n🔥 TRENDING: For new picks, consider trending actors (Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, etc.) but ONLY if their movies aren't already used."
+                        full_prompt += f"\n\n⚠️ IMPORTANT: Each movie in my Google Drive file has already been used. Pick a movie that's NOT in the file. Consider movies from different decades and genres for variety."
                     else:
                         # Even for first generation, emphasize movie diversity
-                        full_prompt += " \\n\\n🎯 MOVIE DIVERSITY: Each movie can only be used ONCE. Pick from a wide variety of movies across different decades (1970s-2020s) and genres. \\n\\n🔥 TRENDING: Consider films with trending actors (Sydney Sweeney, Zendaya, Timothée Chalamet, etc.) for engagement."
+                        full_prompt += "\n\n🎯 MOVIE DIVERSITY: Each movie can only be used ONCE. Pick from a wide variety of movies across different decades (1970s-2020s) and genres for maximum variety."
                     
                     if extra_prompt.strip():
                         full_prompt += " " + extra_prompt.strip()
@@ -1838,18 +1802,17 @@ REMEMBER: Using a banned movie = AUTOMATIC REJECTION
                         with st.expander("🔍 **DEBUG: View AI Prompt** (Admin Only)", expanded=False):
                             st.text_area("Full prompt sent to AI:", value=full_prompt, height=200, disabled=True)
                             if used_titles:
-                                st.write(f"**Total existing titles:** {len(used_titles)}")
-                                st.write(f"**Unique movies extracted:** {len(used_movies) if 'used_movies' in locals() else 'N/A'}")
-                                # Show sample of actual titles being excluded
-                                with st.expander("View titles being excluded", expanded=False):
-                                    for i, title in enumerate(list(used_titles)[:10], 1):
+                                st.write(f"**Total titles in Google Drive file:** {len(used_titles)}")
+                                # Show sample of actual titles being passed
+                                with st.expander("View sample from Google Drive file", expanded=False):
+                                    for i, title in enumerate(list(used_titles)[:15], 1):
                                         st.caption(f"{i}. {title}")
-                                    if len(used_titles) > 10:
-                                        st.caption(f"... and {len(used_titles) - 10} more")
+                                    if len(used_titles) > 15:
+                                        st.caption(f"... and {len(used_titles) - 15} more titles in file")
                             # Calculate and show prompt size
                             prompt_length = len(full_prompt)
                             estimated_tokens = prompt_length / 4  # Rough estimate: 1 token ≈ 4 characters
-                            st.write(f"**Prompt length:** {prompt_length} characters (≈{int(estimated_tokens)} tokens)")
+                            st.write(f"**Prompt length:** {prompt_length:,} characters (≈{int(estimated_tokens):,} tokens)")
                     
                     # Generate multiple scripts
                     all_generated_scripts = []
@@ -1860,57 +1823,37 @@ REMEMBER: Using a banned movie = AUTOMATIC REJECTION
                     for script_num in range(int(num_scripts)):
                         st.write(f"🔄 Generating script {script_num + 1} of {int(num_scripts)}...")
                         
-                        # REBUILD prompt for each generation with updated banned list
+                        # REBUILD prompt for each generation with UPDATED complete titles file
                         if script_num > 0:
-                            # Get fresh titles including ones just added
+                            # Get fresh titles including ones just added from this session
                             used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
                             used_titles_list = list(used_titles)
-                            used_movies_with_years = set()
                             
-                            # Extract ALL movies (including from this session)
-                            for title in used_titles_list:
-                                movie, _ = SimilarityChecker.extract_movie_and_fact(title)
-                                if movie:
-                                    used_movies_with_years.add(movie)
+                            # Get the COMPLETE updated titles file
+                            all_existing_titles = "\n".join(used_titles_list)
                             
-                            # Add session movies
-                            used_movies_with_years.update(session_used_movies)
-                            
-                            # Rebuild the ENTIRE prompt with updated banned list
-                            banned_movies_list = "\n".join(sorted(used_movies_with_years)[:200])
-                            
+                            # Pass the UPDATED complete Google Drive file for subsequent scripts
                             exclusion_text = f"""
-🛑🛑🛑 CRITICAL INSTRUCTION - READ THIS FIRST 🛑🛑🛑
+🛑🛑🛑 UPDATED GOOGLE DRIVE FILE - READ CAREFULLY 🛑🛑🛑
 
-YOU MUST NOT USE ANY OF THESE {len(used_movies_with_years)} BANNED MOVIES:
+This is my UPDATED Google Drive file with {len(used_titles_list)} titles.
+NEW titles were just added from previous scripts.
 
-{banned_movies_list}
+===== UPDATED GOOGLE DRIVE TITLES FILE (titles.txt) =====
+{all_existing_titles}
+===== END OF UPDATED FILE =====
 
-🚫 THE ABOVE MOVIES ARE COMPLETELY OFF-LIMITS! 🚫
+⚠️ THIS IS AN UPDATED FILE:
+1. New movies were JUST added from script {script_num}
+2. The file now contains MORE titles than before
+3. ALL movies in this updated file are OFF-LIMITS
+4. Do NOT repeat any movie from the file
+5. Pick a movie that is COMPLETELY ABSENT from this updated file
 
-INSTRUCTION: You MUST pick a movie that is NOT in the list above. 
-
-Here are some examples of movies you COULD use instead:
-- Arrival (2016)
-- Mad Max: Fury Road (2015)  
-- Get Out (2017)
-- The Grand Budapest Hotel (2014)
-- Moonlight (2016)
-- Parasite (2019)
-- Everything Everywhere All at Once (2022)
-- The Lighthouse (2019)
-- Hereditary (2018)
-- Ex Machina (2014)
-
-CRITICAL: Before writing your response, ask yourself:
-"Is the movie I'm about to use in the BANNED list above?"
-If YES → Pick a different movie
-If NO → Proceed with that movie
-
-REMEMBER: Using a banned movie = AUTOMATIC REJECTION
+🎯 YOUR TASK: Generate a fact about a movie NOT in my updated Google Drive file above.
 """
-                            # Combine: Exclusion text + User's base prompt + Extra prompt
-                            script_prompt = f"{exclusion_text}\n\n--- YOUR TASK ---\n\n{base_prompt}"
+                            # Combine with user's instructions
+                            script_prompt = f"{exclusion_text}\n\n--- USER'S INSTRUCTIONS ---\n\n{base_prompt}"
                             
                             if extra_prompt.strip():
                                 script_prompt += "\n\nAdditional instructions: " + extra_prompt.strip()
@@ -1920,12 +1863,12 @@ REMEMBER: Using a banned movie = AUTOMATIC REJECTION
                             # First script uses original prompt
                             script_prompt = full_prompt
                         
-                        # Add MULTIPLE aggressive reminders
-                        script_prompt += "\n\n🛑 STOP! Before you write ANYTHING:\n"
-                        script_prompt += "1. Pick a movie that is NOT in the banned list\n"
-                        script_prompt += "2. Double-check it's not in the banned list\n"
-                        script_prompt += "3. If you're about to use The Thing, The Wicker Man, Taxi Driver, Poltergeist, or Whiplash - STOP! They're BANNED!\n"
-                        script_prompt += "\n⚠️ FINAL WARNING: If you use a banned movie, your response will be REJECTED. Pick something NEW and DIFFERENT!"
+                        # Add final reminders
+                        script_prompt += "\n\n🛑 BEFORE YOU START:\n"
+                        script_prompt += "1. Check the Google Drive file above\n" 
+                        script_prompt += "2. Make sure your chosen movie is NOT in that file\n"
+                        script_prompt += "3. Remember: Each movie can only be used ONCE\n"
+                        script_prompt += "\n⚠️ If you use a movie from my Google Drive file, it will be rejected as a duplicate."
                         
                         # Debug: Show the ACTUAL prompt being sent for THIS script
                         if user_role == 'admin':
@@ -1938,15 +1881,15 @@ REMEMBER: Using a banned movie = AUTOMATIC REJECTION
                                 estimated_tokens = prompt_length / 4
                                 st.write(f"**Prompt length:** {prompt_length:,} characters (≈{int(estimated_tokens):,} tokens)")
                                 
-                                # Show banned movies count
-                                if 'used_movies_with_years' in locals():
-                                    st.write(f"**Total banned movies:** {len(used_movies_with_years)}")
-                                    with st.expander("View banned movies list", expanded=False):
-                                        banned_list = sorted(list(used_movies_with_years))[:50]
-                                        for i, movie in enumerate(banned_list, 1):
-                                            st.caption(f"{i}. {movie}")
-                                        if len(used_movies_with_years) > 50:
-                                            st.caption(f"... and {len(used_movies_with_years) - 50} more")
+                                # Show titles count
+                                if 'used_titles_list' in locals():
+                                    st.write(f"**Total titles in Google Drive file:** {len(used_titles_list)}")
+                                    with st.expander("View sample titles from file", expanded=False):
+                                        sample_titles = used_titles_list[:20] if 'used_titles_list' in locals() else []
+                                        for i, title in enumerate(sample_titles, 1):
+                                            st.caption(f"{i}. {title}")
+                                        if len(used_titles_list) > 20:
+                                            st.caption(f"... and {len(used_titles_list) - 20} more")
                                 
                                 if script_num > 0:
                                     st.write(f"**Movies added this session:** {len(session_used_movies)}")
@@ -1979,29 +1922,34 @@ REMEMBER: Using a banned movie = AUTOMATIC REJECTION
                                     if user_role == 'admin':
                                         st.info(f"🔍 Debug: Extracted {len(titles)} titles from script {script_num + 1}")
                                     
-                                    # PRE-CHECK: See if AI used a banned movie
+                                    # PRE-CHECK: See if AI used a movie from the Google Drive file
                                     will_be_blocked = False
-                                    for title in titles:
-                                        movie, _ = SimilarityChecker.extract_movie_and_fact(title)
-                                        if movie:
-                                            normalized_movie = SimilarityChecker.normalize_text(movie)
-                                            # Check against existing movies
-                                            for existing_movie in used_movies_with_years if 'used_movies_with_years' in locals() else []:
-                                                if SimilarityChecker.normalize_text(existing_movie) == normalized_movie:
-                                                    will_be_blocked = True
-                                                    if retry_count == 0:
-                                                        st.warning(f"⚠️ AI tried to use banned movie: {movie}")
-                                                    break
+                                    blocked_movie = None
                                     
-                                    # If AI used a banned movie, retry with stronger prompt
+                                    # Get current titles to check against
+                                    current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                                    
+                                    for title in titles:
+                                        # Check if this title would be blocked as a duplicate
+                                        is_dup, reason = SimilarityChecker.is_duplicate_title(title, current_titles)
+                                        if is_dup:
+                                            will_be_blocked = True
+                                            movie, _ = SimilarityChecker.extract_movie_and_fact(title)
+                                            blocked_movie = movie if movie else title
+                                            if retry_count == 0:
+                                                st.warning(f"⚠️ AI tried to use: {blocked_movie} (Reason: {reason})")
+                                            break
+                                    
+                                    # If AI used a movie from the file, retry with stronger prompt
                                     if will_be_blocked and retry_count < max_retries - 1:
                                         retry_count += 1
-                                        st.warning(f"🔄 Retrying script {script_num + 1} (attempt {retry_count + 1}/{max_retries}) - AI used banned movie")
+                                        st.warning(f"🔄 Retrying script {script_num + 1} (attempt {retry_count + 1}/{max_retries}) - AI used a movie from the Google Drive file")
                                         
                                         # Rebuild prompt with REJECTION notice at the top
                                         rejection_notice = f"❌❌❌ YOUR PREVIOUS ATTEMPT WAS REJECTED ❌❌❌\n\n"
-                                        rejection_notice += f"You tried to use a BANNED movie. DO NOT use any movie from the banned list!\n"
-                                        rejection_notice += f"Pick a COMPLETELY DIFFERENT movie that is NOT in the banned list.\n\n"
+                                        rejection_notice += f"You tried to use '{blocked_movie}' which is already in my Google Drive file!\n"
+                                        rejection_notice += f"DO NOT use ANY movie from the Google Drive file.\n"
+                                        rejection_notice += f"Pick a COMPLETELY DIFFERENT movie that is NOT in the file.\n\n"
                                         
                                         # Prepend rejection notice to original prompt (not doubling it)
                                         original_prompt = script_prompt  # Keep original for reference
@@ -2035,7 +1983,7 @@ REMEMBER: Using a banned movie = AUTOMATIC REJECTION
                                                 
                                                 # If ALL titles from this script were blocked, show warning
                                                 if len(blocked_titles) == len(titles) and len(titles) > 0:
-                                                    st.error(f"⚠️ Script {script_num + 1}: All titles were duplicates! The AI ignored the banned list.")
+                                                    st.error(f"⚠️ Script {script_num + 1}: All titles were duplicates! The AI ignored the Google Drive file.")
                                         except Exception as title_error:
                                             st.error(f"❌ Failed to process title '{title}': {str(title_error)}")
                                 

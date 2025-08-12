@@ -24,7 +24,9 @@
       "Bash(touch:*)",
       "Bash(wmic:*)",
       "Bash(del \"C:\\Users\\Cory\\Desktop\\Shorts\\test_similarity.py\")",
-      "Bash(del test_similarity.py)"
+      "Bash(del test_similarity.py)",
+      "Bash(dir)",
+      "Bash(del nul)"
     ],
     "deny": []
   }
