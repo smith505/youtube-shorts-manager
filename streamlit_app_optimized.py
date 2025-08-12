@@ -5,9 +5,9 @@ Performance improvements implemented
 """
 
 # Version information
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.6.1"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "AGGRESSIVE duplicate elimination - zero tolerance"
+VERSION_NOTES = "Fixed: Generate only 1 script per request (was 5)"
 
 import streamlit as st
 import os
@@ -1109,7 +1109,8 @@ STRICT RULES:
                         if extra_prompt.strip():
                             full_prompt += " " + extra_prompt.strip()
                         
-                        # Add instruction for multiple scripts
+                        # Add instruction to generate ONLY ONE script
+                        full_prompt += "\n\n⚠️ CRITICAL: Generate EXACTLY ONE movie fact script. Do not generate multiple scripts."
                         if int(num_scripts) > 1:
                             full_prompt += f"\n\nIMPORTANT: Generate unique content different from previous generations in this session."
                         
