@@ -1398,24 +1398,47 @@ def main():
                         with col3:
                             st.info(f"Showing {start_idx + 1}-{end_idx} of {len(titles_list)}")
                         
-                        # Show titles for current page only
-                        for idx, title in enumerate(page_titles):
-                            actual_idx = start_idx + idx
-                            col1, col2 = st.columns([1, 10])
+                        # Use a form to batch checkbox updates
+                        with st.form(key=f"delete_form_page_{current_page}"):
+                            # Track selections for this form submission
+                            page_selections = {}
+                            
+                            # Show titles for current page only
+                            for idx, title in enumerate(page_titles):
+                                actual_idx = start_idx + idx
+                                col1, col2 = st.columns([1, 10])
+                                with col1:
+                                    # Use checkbox for selection
+                                    is_selected = title in st.session_state.selected_for_deletion
+                                    checkbox_key = f"del_cb_{actual_idx}"
+                                    page_selections[title] = st.checkbox(
+                                        "Select", 
+                                        value=is_selected, 
+                                        key=checkbox_key, 
+                                        label_visibility="hidden"
+                                    )
+                                with col2:
+                                    # Show title with visual indicator if selected
+                                    if is_selected:
+                                        st.markdown(f"🗑️ ~~{title}~~")
+                                    else:
+                                        st.write(f"• {title}")
+                            
+                            # Submit button to apply changes
+                            col1, col2, col3 = st.columns([1, 1, 3])
                             with col1:
-                                # Use checkbox for selection with proper label
-                                is_selected = title in st.session_state.selected_for_deletion
-                                checkbox_key = f"del_cb_{actual_idx}"  # Unique key using actual index
-                                if st.checkbox("Select", value=is_selected, key=checkbox_key, label_visibility="hidden"):
-                                    st.session_state.selected_for_deletion.add(title)
-                                else:
-                                    st.session_state.selected_for_deletion.discard(title)
+                                if st.form_submit_button("💾 Apply Changes", type="primary"):
+                                    # Update selections based on form state
+                                    for title, selected in page_selections.items():
+                                        if selected:
+                                            st.session_state.selected_for_deletion.add(title)
+                                        else:
+                                            st.session_state.selected_for_deletion.discard(title)
+                                    st.rerun()
                             with col2:
-                                # Show title with visual indicator if selected
-                                if title in st.session_state.selected_for_deletion:
-                                    st.markdown(f"🗑️ ~~{title}~~")
-                                else:
-                                    st.write(f"• {title}")
+                                st.write(f"{len([v for v in page_selections.values() if v])} checked")
+                            with col3:
+                                st.info("Click 'Apply Changes' to save selections")
                     
                     else:
                         st.info("No titles found in this channel.")
