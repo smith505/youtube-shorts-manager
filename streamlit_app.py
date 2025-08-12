@@ -782,6 +782,11 @@ def extract_titles_from_response(content: str) -> List[str]:
     
     for line in lines:
         line = line.strip()
+        
+        # Remove markdown bold formatting if present
+        if line.startswith('**') and line.endswith('**'):
+            line = line[2:-2].strip()
+        
         # Look for "TITLE:" or "TITLE" format (case insensitive)
         line_upper = line.upper()
         if line_upper.startswith('TITLE:'):
@@ -793,9 +798,16 @@ def extract_titles_from_response(content: str) -> List[str]:
         elif line_upper.startswith('TITLE') and len(line) > 5 and not line[5].isalpha():
             # Handle "TITLE" followed by non-letter (like numbers, symbols)
             title = line[5:].strip()
+        elif line_upper == 'TITLE':
+            # Handle standalone "TITLE" on one line (title might be on next line)
+            continue  # Skip this line, title should be on next line
         else:
+            # Check if previous line was just "TITLE" or "**TITLE**"
             continue
             
+        # Clean up the title - remove any remaining markdown formatting
+        title = title.replace('**', '').strip()
+        
         # Clean up the title
         if title.endswith(' SHORT'):
             title = title[:-6].strip()
@@ -805,6 +817,25 @@ def extract_titles_from_response(content: str) -> List[str]:
         
         if title and len(title) > 5:  # Minimum length check
             titles_found.append(title)
+    
+    # Also check for pattern where TITLE is on one line and the actual title is on the next
+    for i in range(len(lines) - 1):
+        line = lines[i].strip()
+        # Remove markdown if present
+        if line.startswith('**') and line.endswith('**'):
+            line = line[2:-2].strip()
+        
+        if line.upper() == 'TITLE' or line.upper() == 'TITLE:':
+            # Get the next line as the title
+            next_line = lines[i + 1].strip()
+            # Remove markdown from next line too
+            next_line = next_line.replace('**', '').strip()
+            
+            # Remove any leading numbers/dots/dashes
+            next_line = re.sub(r'^[\d\-\.\s]+', '', next_line).strip()
+            
+            if next_line and len(next_line) > 5 and next_line not in titles_found:
+                titles_found.append(next_line)
     
     return titles_found
 
