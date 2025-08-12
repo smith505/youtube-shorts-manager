@@ -1853,9 +1853,6 @@ def main():
                             
                             if content:
                                 st.caption(f"📊 {len(content.split())} words, {len(content)} characters")
-                
-                except Exception as e:
-                    st.error(f"❌ Error during generation: {str(e)}")
                     
             except Exception as e:
                 st.error(f"❌ Outer error: {str(e)}")
