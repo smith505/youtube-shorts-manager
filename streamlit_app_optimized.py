@@ -5,9 +5,9 @@ Performance improvements implemented
 """
 
 # Version information
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.4.0"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "Smart duplicate detection using semantic similarity"
+VERSION_NOTES = "Improved UI + Multi-script generation"
 
 import streamlit as st
 import os
@@ -1031,83 +1031,151 @@ def main():
         
         # Script generation section
         st.markdown("---")
-        st.subheader("🎯 Generate New Script")
-        extra_prompt = st.text_input("Extra prompt (optional):", help="Add specific instructions")
+        st.subheader("🎯 Generate New Scripts")
         
-        if st.button("🚀 Generate Script", type="primary", key="generate_button"):
-            with st.spinner("🎬 Generating your script..."):
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            extra_prompt = st.text_input("Extra prompt (optional):", help="Add specific instructions")
+        with col2:
+            num_scripts = st.number_input("🔢 Number of scripts:", min_value=1, max_value=10, value=1, step=1, help="Generate 1-10 scripts at once")
+        
+        if st.button("🚀 Generate Scripts", type="primary", key="generate_button"):
+            with st.spinner(f"🎬 Generating {num_scripts} script{'s' if num_scripts > 1 else ''}..."):
                 try:
-                    # Get used titles efficiently
-                    used_titles = st.session_state.channel_manager.get_used_titles(selected_channel)
+                    all_generated_scripts = []
+                    total_added = 0
+                    total_blocked = 0
                     
-                    # Build prompt
-                    base_prompt = st.session_state.channel_manager.get_channel_prompt(selected_channel)
-                    full_prompt = base_prompt
+                    for script_num in range(int(num_scripts)):
+                        st.write(f"🔄 Generating script {script_num + 1} of {int(num_scripts)}...")
+                        
+                        # Get fresh used titles for each generation (includes newly added ones)
+                        used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                        
+                        # Build prompt
+                        base_prompt = st.session_state.channel_manager.get_channel_prompt(selected_channel)
+                        full_prompt = base_prompt
+                        
+                        if used_titles:
+                            # Optimize exclusion list building
+                            used_titles_list = list(used_titles)[:100]  # Limit to prevent huge prompts
+                            exclusion_text = f"EXISTING FACTS (DO NOT REPEAT): {' | '.join(used_titles_list[:20])}"
+                            full_prompt = f"🚫 {exclusion_text}\n\n{base_prompt}"
+                        
+                        if extra_prompt.strip():
+                            full_prompt += " " + extra_prompt.strip()
+                        
+                        # Add instruction for multiple scripts
+                        if int(num_scripts) > 1:
+                            full_prompt += f" Generate unique content different from previous generations."
+                        
+                        # Generate script
+                        session_id = str(uuid.uuid4())
+                        result = st.session_state.claude_client.generate_script(full_prompt, session_id)
+                        
+                        if result["success"]:
+                            content = result.get("content", "")
+                            titles = extract_titles_from_response(content)
+                            
+                            # Save titles and script (with duplicate checking)
+                            added_count = 0
+                            blocked_titles = []
+                            
+                            for title in titles:
+                                # Get fresh titles again to check against
+                                current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                                is_dup, reason = SimilarityChecker.is_duplicate_title(title, current_titles)
+                                
+                                if not is_dup:
+                                    if st.session_state.channel_manager.add_title(selected_channel, title):
+                                        added_count += 1
+                                else:
+                                    blocked_titles.append((title, reason))
+                                    total_blocked += 1
+                            
+                            user_name = current_user.get('first_name', 'Unknown User')
+                            st.session_state.channel_manager.save_script(selected_channel, content, session_id, user_name)
+                            
+                            # Store script info
+                            script_info = {
+                                "script_number": script_num + 1,
+                                "content": content,
+                                "titles": titles,
+                                "added_titles": added_count,
+                                "blocked_titles": blocked_titles,
+                                "session_id": session_id,
+                                "token_usage": result.get('token_usage', {})
+                            }
+                            all_generated_scripts.append(script_info)
+                            total_added += added_count
+                        
+                        else:
+                            st.error(f"❌ Script {script_num + 1} failed: {result['error']}")
                     
-                    if used_titles:
-                        # Optimize exclusion list building
-                        used_titles_list = list(used_titles)[:100]  # Limit to prevent huge prompts
-                        exclusion_text = f"EXISTING FACTS (DO NOT REPEAT): {' | '.join(used_titles_list[:20])}"
-                        full_prompt = f"🚫 {exclusion_text}\n\n{base_prompt}"
+                    # Display overall results
+                    st.success(f"✅ Generated {len(all_generated_scripts)} script{'s' if len(all_generated_scripts) > 1 else ''}!")
+                    if total_added > 0:
+                        st.success(f"🎯 Added {total_added} new unique titles total!")
+                    if total_blocked > 0:
+                        st.warning(f"🚫 Blocked {total_blocked} duplicate/similar titles total!")
                     
-                    if extra_prompt.strip():
-                        full_prompt += " " + extra_prompt.strip()
-                    
-                    # Generate script
-                    session_id = str(uuid.uuid4())
-                    result = st.session_state.claude_client.generate_script(full_prompt, session_id)
-                    
-                    if result["success"]:
-                        content = result.get("content", "")
-                        titles = extract_titles_from_response(content)
+                    # Display each script
+                    for script_info in all_generated_scripts:
+                        script_num = script_info["script_number"]
+                        content = script_info["content"]
+                        titles = script_info["titles"]
+                        added_count = script_info["added_titles"]
+                        blocked_titles = script_info["blocked_titles"]
+                        session_id = script_info["session_id"]
                         
-                        # Save titles and script (with duplicate checking)
-                        added_count = 0
-                        duplicate_count = 0
-                        for title in titles:
-                            if st.session_state.channel_manager.add_title(selected_channel, title):
-                                added_count += 1
-                            else:
-                                duplicate_count += 1
+                        st.markdown("---")
+                        st.subheader(f"📄 Script #{script_num}")
                         
-                        user_name = current_user.get('first_name', 'Unknown User')
-                        st.session_state.channel_manager.save_script(selected_channel, content, session_id, user_name)
+                        # Show title statistics for this script
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Titles", len(titles))
+                        with col2:
+                            st.metric("Added", added_count, delta=added_count if added_count > 0 else None)
+                        with col3:
+                            st.metric("Blocked", len(blocked_titles), delta=f"-{len(blocked_titles)}" if blocked_titles else None)
                         
-                        # Display results
-                        if added_count > 0:
-                            st.success(f"✅ Generated script with {added_count} new unique titles!")
-                        if duplicate_count > 0:
-                            st.info(f"ℹ️ Filtered out {duplicate_count} similar/duplicate titles")
+                        # Show blocked titles with reasons
+                        if blocked_titles:
+                            with st.expander(f"🚫 Blocked Titles for Script #{script_num} ({len(blocked_titles)})", expanded=False):
+                                for blocked_title, reason in blocked_titles:
+                                    st.write(f"❌ **{blocked_title}**")
+                                    st.caption(f"   Reason: {reason}")
                         
-                        if titles:
-                            st.subheader("📋 Extracted Titles:")
-                            for i, title in enumerate(titles, 1):
-                                st.write(f"{i}. {title}")
+                        # Show accepted titles
+                        accepted_titles = [title for title in titles if not any(title == bt[0] for bt in blocked_titles)]
+                        if accepted_titles:
+                            with st.expander(f"✅ Added Titles for Script #{script_num} ({len(accepted_titles)})", expanded=False):
+                                for i, title in enumerate(accepted_titles, 1):
+                                    st.write(f"{i}. {title}")
                         
-                        st.subheader("📄 Generated Script:")
-                        with st.expander("View Full Script", expanded=True):
+                        # Show script content
+                        with st.expander(f"📜 View Script #{script_num} Content", expanded=len(all_generated_scripts) == 1):
                             st.text_area(
-                                "Generated Content:",
+                                f"Script #{script_num} Content:",
                                 value=content,
-                                height=500,
+                                height=400,
                                 disabled=True,
                                 key=f"script_{session_id}"
                             )
                             
                             if content:
                                 st.caption(f"📊 {len(content.split())} words, {len(content)} characters")
-                        
-                        # Store in session for persistence
-                        st.session_state.last_successful_generation = {
-                            "content": content,
-                            "titles": titles,
-                            "session_id": session_id,
-                            "channel": selected_channel,
-                            "token_usage": result.get('token_usage', {}),
-                            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        }
-                    else:
-                        st.error(f"❌ Generation failed: {result['error']}")
+                    
+                    # Store in session for persistence
+                    st.session_state.last_successful_generation = {
+                        "scripts": all_generated_scripts,
+                        "total_scripts": len(all_generated_scripts),
+                        "total_added": total_added,
+                        "total_blocked": total_blocked,
+                        "channel": selected_channel,
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
                 
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")

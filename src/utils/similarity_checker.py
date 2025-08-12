@@ -73,10 +73,41 @@ class SimilarityChecker:
         return key_words
     
     @staticmethod
-    def are_facts_similar(fact1: str, fact2: str, threshold: float = 0.7) -> bool:
+    def extract_topic_category(fact: str) -> str:
+        """Extract the general topic/category from a fact for broader similarity detection."""
+        fact_lower = fact.lower()
+        
+        # Define topic categories with their keywords
+        categories = {
+            'acting_performance': ['acting', 'performance', 'role', 'character', 'portrayed', 'played', '演技'],
+            'improvisation': ['improvised', 'improvisation', 'ad-lib', 'ad lib', 'spontaneous', 'unscripted'],
+            'choreography_dance': ['choreographed', 'dance', 'dancing', 'moves', 'sequence', 'routine'],
+            'stunts_action': ['stunts', 'stunt', 'action', 'fight', 'martial arts', 'combat'],
+            'real_life_based': ['real life', 'based on', 'true story', 'actually happened', 'real person'],
+            'method_acting': ['method', 'stayed in character', 'immersed', 'preparation', 'research'],
+            'physical_transformation': ['gained weight', 'lost weight', 'transformation', 'physical', 'body'],
+            'injury_accident': ['injured', 'hurt', 'accident', 'broke', 'fractured', 'hospital'],
+            'director_choice': ['director', 'directed', 'filmmaker', 'chose', 'decided', 'vision'],
+            'casting_audition': ['cast', 'casting', 'audition', 'chosen', 'selected', 'hired'],
+            'dialogue_script': ['dialogue', 'lines', 'script', 'wrote', 'rewrote', 'changed'],
+            'music_soundtrack': ['music', 'soundtrack', 'song', 'composed', 'score'],
+            'special_effects': ['cgi', 'effects', 'green screen', 'practical', 'makeup'],
+            'production_behind': ['production', 'filming', 'shot', 'created', 'made', 'budget'],
+            'easter_eggs': ['easter egg', 'hidden', 'reference', 'cameo', 'tribute'],
+        }
+        
+        # Check which category this fact belongs to
+        for category, keywords in categories.items():
+            if any(keyword in fact_lower for keyword in keywords):
+                return category
+        
+        return 'general'  # Default category
+    
+    @staticmethod
+    def are_facts_similar(fact1: str, fact2: str, threshold: float = 0.6) -> bool:
         """
-        Check if two facts are semantically similar.
-        Uses multiple similarity metrics.
+        Check if two facts are semantically similar with stricter detection.
+        Uses multiple similarity metrics and topic categorization.
         """
         # Normalize facts
         norm_fact1 = SimilarityChecker.normalize_text(fact1)
@@ -85,6 +116,15 @@ class SimilarityChecker:
         # Quick exact match check
         if norm_fact1 == norm_fact2:
             return True
+        
+        # Check if they're in the same topic category
+        category1 = SimilarityChecker.extract_topic_category(fact1)
+        category2 = SimilarityChecker.extract_topic_category(fact2)
+        
+        # If same category, be more strict about similarity
+        category_threshold = threshold
+        if category1 == category2 and category1 != 'general':
+            category_threshold = 0.4  # Much more strict for same category
         
         # Extract key elements
         key_words1 = SimilarityChecker.extract_key_elements(fact1)
@@ -96,43 +136,94 @@ class SimilarityChecker:
             union = key_words1.union(key_words2)
             jaccard_sim = len(intersection) / len(union) if union else 0
             
-            # High overlap of key terms indicates similar facts
-            if jaccard_sim >= threshold:
+            # Use category-adjusted threshold
+            if jaccard_sim >= category_threshold:
                 return True
         
         # Use sequence matching for similar phrasing
         sequence_sim = SequenceMatcher(None, norm_fact1, norm_fact2).ratio()
-        if sequence_sim >= 0.8:  # High threshold for sequence similarity
+        if sequence_sim >= 0.75:  # Slightly lower but still high threshold
             return True
         
-        # Check for specific patterns that indicate the same fact
-        # (e.g., "choreographed her own dance" vs "choreographed her dance")
+        # Enhanced pattern matching for common similar topics
         patterns_to_check = [
-            (r'choreograph\w*\s+\w+\s+(?:own\s+)?(?:viral\s+)?danc\w+', 
-             r'choreograph\w*\s+\w+\s+(?:own\s+)?(?:viral\s+)?danc\w+'),
+            # Dance/choreography patterns
+            (r'choreograph\w*\s+.*danc\w*', r'choreograph\w*\s+.*danc\w*'),
+            (r'danc\w*\s+.*choreograph\w*', r'danc\w*\s+.*choreograph\w*'),
+            # Improvisation patterns
             (r'improvisd?\w*', r'improvisd?\w*'),
             (r'ad[\s-]?libb?\w*', r'ad[\s-]?libb?\w*'),
-            (r'real\s+(?:life\s+)?(?:actual\s+)?', r'real\s+(?:life\s+)?(?:actual\s+)?'),
-            (r'(?:actually\s+)?(?:really\s+)?happen\w*', r'(?:actually\s+)?(?:really\s+)?happen\w*'),
+            (r'unscripted', r'spontaneous'),
+            # Acting method patterns
+            (r'method\s+act\w*', r'stayed.*character'),
+            (r'immersed.*role', r'preparation.*character'),
+            # Physical transformation
+            (r'gained.*weight', r'lost.*weight'),
+            (r'physical.*transformation', r'body.*change'),
+            # Real life patterns
+            (r'real\s+(?:life\s+)?(?:actual\s+)?', r'based.*true'),
+            (r'(?:actually\s+)?(?:really\s+)?happen\w*', r'true.*story'),
+            # Stunt patterns
+            (r'own.*stunts?', r'did.*stunts?'),
+            (r'stunt.*work', r'action.*sequence'),
+            # Injury patterns
+            (r'injured.*filming', r'hurt.*set'),
+            (r'broke.*during', r'fractured.*while'),
         ]
         
         for pattern1, pattern2 in patterns_to_check:
-            if (re.search(pattern1, norm_fact1) and re.search(pattern2, norm_fact2)):
+            match1 = re.search(pattern1, norm_fact1)
+            match2 = re.search(pattern2, norm_fact2)
+            if match1 and match2:
                 # Both facts contain similar special patterns
-                # Check if they're about the same subject
-                if jaccard_sim >= 0.5:  # Lower threshold when patterns match
+                # Check if they're about the same subject with lower threshold
+                if jaccard_sim >= 0.3:  # Much lower threshold when patterns match
                     return True
         
         return False
     
     @staticmethod
+    def check_movie_topic_diversity(new_title: str, existing_titles: Set[str], max_same_category: int = 2) -> Tuple[bool, str]:
+        """
+        Check if adding this title would create too many similar topics for the same movie.
+        Returns (should_block, reason)
+        """
+        new_movie, new_fact = SimilarityChecker.extract_movie_and_fact(new_title)
+        new_category = SimilarityChecker.extract_topic_category(new_fact)
+        
+        if not new_movie or new_category == 'general':
+            return False, ""  # Don't block if we can't categorize
+        
+        # Count how many titles from same movie are in the same category
+        same_movie_same_category = 0
+        
+        for existing_title in existing_titles:
+            existing_movie, existing_fact = SimilarityChecker.extract_movie_and_fact(existing_title)
+            
+            if existing_movie and SimilarityChecker.normalize_text(new_movie) == SimilarityChecker.normalize_text(existing_movie):
+                existing_category = SimilarityChecker.extract_topic_category(existing_fact)
+                if existing_category == new_category:
+                    same_movie_same_category += 1
+        
+        if same_movie_same_category >= max_same_category:
+            return True, f"Too many {new_category.replace('_', ' ')} facts for {new_movie}"
+        
+        return False, ""
+
+    @staticmethod
     def is_duplicate_title(new_title: str, existing_titles: Set[str]) -> Tuple[bool, str]:
         """
-        Check if a new title is a duplicate of any existing title.
+        Enhanced duplicate detection with topic diversity checking.
         Returns (is_duplicate, similar_title_if_found)
         """
         new_movie, new_fact = SimilarityChecker.extract_movie_and_fact(new_title)
         
+        # First check for topic diversity (prevent too many similar topics for same movie)
+        should_block, reason = SimilarityChecker.check_movie_topic_diversity(new_title, existing_titles)
+        if should_block:
+            return True, reason
+        
+        # Then check for similar facts
         for existing_title in existing_titles:
             existing_movie, existing_fact = SimilarityChecker.extract_movie_and_fact(existing_title)
             

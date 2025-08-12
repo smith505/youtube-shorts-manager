@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.4.0"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "Smart duplicate detection using semantic similarity"
+VERSION_NOTES = "Improved UI + Multi-script generation"
 
 import streamlit as st
 import os
@@ -1605,12 +1605,17 @@ def main():
                         st.rerun()
         
         # Script generation
-        st.subheader("🎯 Generate New Script")
-        extra_prompt = st.text_input("Extra prompt (optional):", help="Add any specific instructions for this generation")
+        st.subheader("🎯 Generate New Scripts")
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            extra_prompt = st.text_input("Extra prompt (optional):", help="Add any specific instructions for this generation")
+        with col2:
+            num_scripts = st.number_input("🔢 Number of scripts:", min_value=1, max_value=10, value=1, step=1, help="Generate 1-10 scripts at once")
         
         # Create button (no disabled state needed for direct generation)
         generate_button = st.button(
-            "🚀 Generate Script", 
+            "🚀 Generate Scripts", 
             type="primary",
             key="generate_button"
         )
@@ -1618,7 +1623,7 @@ def main():
         # Process generation only when button is clicked
         if generate_button:
             try:
-                with st.spinner("🎬 Generating your script... This may take 10-30 seconds..."):
+                with st.spinner(f"🎬 Generating {num_scripts} script{'s' if num_scripts > 1 else ''}... This may take {10 * int(num_scripts)}-{30 * int(num_scripts)} seconds..."):
                     try:
                         # Try with force_refresh first, fallback without it if there's an error
                         try:
@@ -1713,54 +1718,141 @@ def main():
                             estimated_tokens = prompt_length / 4  # Rough estimate: 1 token ≈ 4 characters
                             st.write(f"**Prompt length:** {prompt_length} characters (≈{int(estimated_tokens)} tokens)")
                     
-                    # Generate script
-                    try:
-                        session_id = str(uuid.uuid4())
-                        result = st.session_state.claude_client.generate_script(full_prompt, session_id)
-                    except Exception as api_error:
-                        st.error(f"❌ API Error: {str(api_error)}")
-                        result = {"success": False, "error": f"API call failed: {str(api_error)}"}
+                    # Generate multiple scripts
+                    all_generated_scripts = []
+                    total_added = 0
+                    total_blocked = 0
                     
-                    if result["success"]:
-                        # Initialize variables to ensure they're always defined
-                        content = result.get("content", "No content available")
-                        titles = []
+                    for script_num in range(int(num_scripts)):
+                        st.write(f"🔄 Generating script {script_num + 1} of {int(num_scripts)}...")
+                        
+                        # Add instruction for multiple scripts
+                        script_prompt = full_prompt
+                        if int(num_scripts) > 1:
+                            script_prompt += f" Generate unique content different from previous generations."
                         
                         try:
-                            # Extract and save titles
-                            titles = extract_titles_from_response(content)
+                            session_id = str(uuid.uuid4())
+                            result = st.session_state.claude_client.generate_script(script_prompt, session_id)
+                        except Exception as api_error:
+                            st.error(f"❌ API Error for script {script_num + 1}: {str(api_error)}")
+                            continue
+                        
+                        if result["success"]:
+                            # Initialize variables to ensure they're always defined
+                            content = result.get("content", "No content available")
+                            titles = []
                             
-                            # Debug: Show what titles were found
-                            if user_role == 'admin':
-                                st.info(f"🔍 Debug: Extracted {len(titles)} titles from this generation")
-                            
-                            added_count = 0
-                            duplicate_count = 0
-                            for title in titles:
-                                try:
-                                    if st.session_state.channel_manager.add_title(selected_channel, title):
-                                        added_count += 1
-                                        if user_role == 'admin':
-                                            st.caption(f"✅ Saved title: {title}")
-                                    else:
-                                        duplicate_count += 1
-                                        if user_role == 'admin':
-                                            st.caption(f"ℹ️ Skipped similar title: {title}")
-                                except Exception as title_error:
-                                    st.error(f"❌ Failed to save title '{title}': {str(title_error)}")
-                            
-                            # Display summary of title processing
-                            if added_count > 0:
-                                st.success(f"✅ Added {added_count} new unique titles!")
-                            if duplicate_count > 0:
-                                st.info(f"ℹ️ Filtered out {duplicate_count} similar/duplicate titles")
-                            
-                            # Save script
                             try:
-                                user_name = current_user.get('first_name', 'Unknown User')
-                                st.session_state.channel_manager.save_script(selected_channel, content, session_id, user_name)
-                            except Exception as script_error:
-                                st.error(f"❌ Failed to save script: {str(script_error)}")
+                                # Extract and save titles
+                                titles = extract_titles_from_response(content)
+                                
+                                # Debug: Show what titles were found
+                                if user_role == 'admin':
+                                    st.info(f"🔍 Debug: Extracted {len(titles)} titles from script {script_num + 1}")
+                                
+                                added_count = 0
+                                blocked_titles = []
+                                
+                                for title in titles:
+                                    try:
+                                        # Get fresh titles to check against
+                                        current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                                        is_dup, reason = SimilarityChecker.is_duplicate_title(title, current_titles)
+                                        
+                                        if not is_dup:
+                                            if st.session_state.channel_manager.add_title(selected_channel, title):
+                                                added_count += 1
+                                                if user_role == 'admin':
+                                                    st.caption(f"✅ Saved title: {title}")
+                                        else:
+                                            blocked_titles.append((title, reason))
+                                            total_blocked += 1
+                                            if user_role == 'admin':
+                                                st.caption(f"🚫 Blocked title: {title} (Reason: {reason})")
+                                    except Exception as title_error:
+                                        st.error(f"❌ Failed to process title '{title}': {str(title_error)}")
+                                
+                                # Save script
+                                try:
+                                    user_name = current_user.get('first_name', 'Unknown User')
+                                    st.session_state.channel_manager.save_script(selected_channel, content, session_id, user_name)
+                                except Exception as script_error:
+                                    st.error(f"❌ Failed to save script {script_num + 1}: {str(script_error)}")
+                                
+                                # Store script info
+                                script_info = {
+                                    "script_number": script_num + 1,
+                                    "content": content,
+                                    "titles": titles,
+                                    "added_titles": added_count,
+                                    "blocked_titles": blocked_titles,
+                                    "session_id": session_id,
+                                    "token_usage": result.get('token_usage', {})
+                                }
+                                all_generated_scripts.append(script_info)
+                                total_added += added_count
+                                
+                            except Exception as processing_error:
+                                st.error(f"❌ Error processing script {script_num + 1}: {str(processing_error)}")
+                        else:
+                            st.error(f"❌ Script {script_num + 1} generation failed: {result.get('error', 'Unknown error')}")
+                    
+                    # Display overall results
+                    if all_generated_scripts:
+                        st.success(f"✅ Generated {len(all_generated_scripts)} script{'s' if len(all_generated_scripts) > 1 else ''}!")
+                        if total_added > 0:
+                            st.success(f"🎯 Added {total_added} new unique titles total!")
+                        if total_blocked > 0:
+                            st.warning(f"🚫 Blocked {total_blocked} duplicate/similar titles total!")
+                    
+                    # Display each script
+                    for script_info in all_generated_scripts:
+                        script_num = script_info["script_number"]
+                        content = script_info["content"]
+                        titles = script_info["titles"]
+                        added_count = script_info["added_titles"]
+                        blocked_titles = script_info["blocked_titles"]
+                        session_id = script_info["session_id"]
+                        
+                        st.markdown("---")
+                        st.subheader(f"📄 Script #{script_num}")
+                        
+                        # Show title statistics for this script
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Titles", len(titles))
+                        with col2:
+                            st.metric("Added", added_count, delta=added_count if added_count > 0 else None)
+                        with col3:
+                            st.metric("Blocked", len(blocked_titles), delta=f"-{len(blocked_titles)}" if blocked_titles else None)
+                        
+                        # Show blocked titles with reasons
+                        if blocked_titles:
+                            with st.expander(f"🚫 Blocked Titles for Script #{script_num} ({len(blocked_titles)})", expanded=False):
+                                for blocked_title, reason in blocked_titles:
+                                    st.write(f"❌ **{blocked_title}**")
+                                    st.caption(f"   Reason: {reason}")
+                        
+                        # Show accepted titles
+                        accepted_titles = [title for title in titles if not any(title == bt[0] for bt in blocked_titles)]
+                        if accepted_titles:
+                            with st.expander(f"✅ Added Titles for Script #{script_num} ({len(accepted_titles)})", expanded=False):
+                                for i, title in enumerate(accepted_titles, 1):
+                                    st.write(f"{i}. {title}")
+                        
+                        # Show script content
+                        with st.expander(f"📜 View Script #{script_num} Content", expanded=len(all_generated_scripts) == 1):
+                            st.text_area(
+                                f"Script #{script_num} Content:",
+                                value=content,
+                                height=400,
+                                disabled=True,
+                                key=f"script_{session_id}"
+                            )
+                            
+                            if content:
+                                st.caption(f"📊 {len(content.split())} words, {len(content)} characters")
                         
                         except Exception as processing_error:
                             st.error(f"❌ Error processing results: {str(processing_error)}")
