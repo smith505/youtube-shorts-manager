@@ -5,9 +5,9 @@ Performance improvements implemented
 """
 
 # Version information
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.6.0"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "Better duplicate prevention + Full title list to AI"
+VERSION_NOTES = "AGGRESSIVE duplicate elimination - zero tolerance"
 
 import streamlit as st
 import os
@@ -1057,29 +1057,52 @@ def main():
                         full_prompt = base_prompt
                         
                         if used_titles:
-                            # Send ALL titles to AI to prevent duplicates
+                            # Send titles to AI intelligently
                             used_titles_list = list(used_titles)
                             
-                            # Group titles for better readability in prompt
-                            if len(used_titles_list) <= 50:
-                                # For smaller lists, show all titles
-                                titles_display = ' | '.join(used_titles_list)
+                            # Smart title selection based on list size
+                            if len(used_titles_list) <= 100:
+                                # For smaller lists, send all titles
+                                titles_to_send = used_titles_list
+                                titles_display = '\n'.join(titles_to_send)
+                                sampling_note = ""
+                            elif len(used_titles_list) <= 300:
+                                # For medium lists, send most recent 80 + random sample of 20 older ones
+                                recent_titles = used_titles_list[-80:]  # Most recent 80
+                                older_titles = used_titles_list[:-80]
+                                import random
+                                sample_older = random.sample(older_titles, min(20, len(older_titles)))
+                                titles_to_send = sample_older + recent_titles
+                                titles_display = '\n'.join(titles_to_send)
+                                sampling_note = f"\n(Showing {len(titles_to_send)} of {len(used_titles_list)} total titles - focusing on recent ones)"
                             else:
-                                # For larger lists, show first 30 and last 20 to give context
-                                titles_display = ' | '.join(used_titles_list[:30]) + ' | ... | ' + ' | '.join(used_titles_list[-20:])
+                                # For large lists, send most recent 100 + sample of 50 older
+                                recent_titles = used_titles_list[-100:]  # Most recent 100
+                                older_titles = used_titles_list[:-100]
+                                import random
+                                sample_older = random.sample(older_titles, min(50, len(older_titles)))
+                                titles_to_send = sample_older + recent_titles
+                                titles_display = '\n'.join(titles_to_send)
+                                sampling_note = f"\n(Showing {len(titles_to_send)} representative titles from {len(used_titles_list)} total)"
                             
-                            # Create comprehensive exclusion prompt
+                            # Create comprehensive exclusion prompt with file-like format
                             exclusion_text = f"""
-🚫 CRITICAL: You have already created {len(used_titles_list)} facts. You MUST NOT create anything similar to these:
+🚫 CRITICAL DUPLICATE PREVENTION:
 
-EXISTING FACTS (NEVER REPEAT OR CREATE SIMILAR):
+You have already created {len(used_titles_list)} movie facts. Below is the list of existing facts.
+You MUST generate completely different facts that are NOT similar to any of these:{sampling_note}
+
+===== EXISTING FACTS FILE =====
 {titles_display}
+===== END OF FACTS FILE =====
 
-RULES:
-1. DO NOT use the same fact even with different wording
-2. DO NOT use similar facts (e.g., if "Jenna Ortega choreographed dance" exists, don't use "Jenna Ortega created dance moves")
-3. You CAN use the same movie with DIFFERENT facts
-4. Each fact must be COMPLETELY DIFFERENT from all {len(used_titles_list)} existing facts above
+STRICT RULES:
+1. Read through ALL the facts above carefully
+2. DO NOT repeat any fact, even with different wording
+3. DO NOT create similar facts (e.g., if "actor improvised scene" exists, don't create "actor ad-libbed dialogue")
+4. If you see multiple facts about the same topic (e.g., multiple "improvisation" facts), AVOID that topic entirely
+5. You CAN use the same movies but MUST use completely different facts
+6. Generate fresh, unique facts not similar to anything in the list above
 """
                             full_prompt = f"{exclusion_text}\n\n{base_prompt}"
                         

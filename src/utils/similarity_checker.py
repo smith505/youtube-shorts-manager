@@ -77,23 +77,25 @@ class SimilarityChecker:
         """Extract the general topic/category from a fact for broader similarity detection."""
         fact_lower = fact.lower()
         
-        # Define topic categories with their keywords
+        # Define topic categories with MORE keywords for better detection
         categories = {
-            'acting_performance': ['acting', 'performance', 'role', 'character', 'portrayed', 'played', '演技'],
-            'improvisation': ['improvised', 'improvisation', 'ad-lib', 'ad lib', 'spontaneous', 'unscripted'],
-            'choreography_dance': ['choreographed', 'dance', 'dancing', 'moves', 'sequence', 'routine'],
-            'stunts_action': ['stunts', 'stunt', 'action', 'fight', 'martial arts', 'combat'],
-            'real_life_based': ['real life', 'based on', 'true story', 'actually happened', 'real person'],
-            'method_acting': ['method', 'stayed in character', 'immersed', 'preparation', 'research'],
-            'physical_transformation': ['gained weight', 'lost weight', 'transformation', 'physical', 'body'],
-            'injury_accident': ['injured', 'hurt', 'accident', 'broke', 'fractured', 'hospital'],
-            'director_choice': ['director', 'directed', 'filmmaker', 'chose', 'decided', 'vision'],
-            'casting_audition': ['cast', 'casting', 'audition', 'chosen', 'selected', 'hired'],
-            'dialogue_script': ['dialogue', 'lines', 'script', 'wrote', 'rewrote', 'changed'],
-            'music_soundtrack': ['music', 'soundtrack', 'song', 'composed', 'score'],
-            'special_effects': ['cgi', 'effects', 'green screen', 'practical', 'makeup'],
-            'production_behind': ['production', 'filming', 'shot', 'created', 'made', 'budget'],
-            'easter_eggs': ['easter egg', 'hidden', 'reference', 'cameo', 'tribute'],
+            'acting_performance': ['acting', 'performance', 'role', 'character', 'portrayed', 'played', '演技', 'actor', 'actress', 'portrayal'],
+            'improvisation': ['improvised', 'improvisation', 'ad-lib', 'ad lib', 'spontaneous', 'unscripted', 'made up', 'on the spot', 'off script'],
+            'choreography_dance': ['choreographed', 'choreography', 'dance', 'dancing', 'moves', 'sequence', 'routine', 'movement', 'steps'],
+            'stunts_action': ['stunts', 'stunt', 'action', 'fight', 'martial arts', 'combat', 'fighting', 'battle', 'chase'],
+            'real_life_based': ['real life', 'based on', 'true story', 'actually happened', 'real person', 'inspired by', 'actual', 'authentic', 'really'],
+            'method_acting': ['method', 'stayed in character', 'immersed', 'preparation', 'research', 'lived as', 'became', 'embodied'],
+            'physical_transformation': ['gained weight', 'lost weight', 'transformation', 'physical', 'body', 'gained', 'lost', 'pounds', 'training'],
+            'injury_accident': ['injured', 'hurt', 'accident', 'broke', 'fractured', 'hospital', 'wound', 'pain', 'damaged'],
+            'director_choice': ['director', 'directed', 'filmmaker', 'chose', 'decided', 'vision', 'wanted', 'insisted', 'demanded'],
+            'casting_audition': ['cast', 'casting', 'audition', 'chosen', 'selected', 'hired', 'picked', 'originally', 'almost'],
+            'dialogue_script': ['dialogue', 'lines', 'script', 'wrote', 'rewrote', 'changed', 'words', 'speech', 'saying'],
+            'music_soundtrack': ['music', 'soundtrack', 'song', 'composed', 'score', 'theme', 'musical', 'singing', 'sang'],
+            'special_effects': ['cgi', 'effects', 'green screen', 'practical', 'makeup', 'visual', 'vfx', 'prosthetics', 'animated'],
+            'production_behind': ['production', 'filming', 'shot', 'created', 'made', 'budget', 'behind the scenes', 'set', 'crew'],
+            'easter_eggs': ['easter egg', 'hidden', 'reference', 'cameo', 'tribute', 'homage', 'nod', 'appearance', 'secret'],
+            'voice_dubbing': ['voice', 'dubbed', 'voiceover', 'vocal', 'speaking', 'accent', 'language'],
+            'costume_wardrobe': ['costume', 'wardrobe', 'outfit', 'clothes', 'wearing', 'dressed', 'fashion', 'designer'],
         }
         
         # Check which category this fact belongs to
@@ -121,10 +123,10 @@ class SimilarityChecker:
         category1 = SimilarityChecker.extract_topic_category(fact1)
         category2 = SimilarityChecker.extract_topic_category(fact2)
         
-        # If same category, be more strict about similarity
+        # If same category, be EXTREMELY strict about similarity
         category_threshold = threshold
         if category1 == category2 and category1 != 'general':
-            category_threshold = 0.4  # Much more strict for same category
+            category_threshold = 0.25  # VERY strict for same category
         
         # Extract key elements
         key_words1 = SimilarityChecker.extract_key_elements(fact1)
@@ -136,39 +138,76 @@ class SimilarityChecker:
             union = key_words1.union(key_words2)
             jaccard_sim = len(intersection) / len(union) if union else 0
             
-            # Use category-adjusted threshold
+            # Use category-adjusted threshold - MUCH STRICTER
             if jaccard_sim >= category_threshold:
                 return True
         
-        # Use sequence matching for similar phrasing
+        # Use sequence matching for similar phrasing - STRICTER
         sequence_sim = SequenceMatcher(None, norm_fact1, norm_fact2).ratio()
-        if sequence_sim >= 0.75:  # Slightly lower but still high threshold
+        if sequence_sim >= 0.65:  # Lower threshold to catch more variations
             return True
         
-        # Enhanced pattern matching for common similar topics
+        # Check for same actor/character names (NEW)
+        actors_pattern = r'\b([A-Z][a-z]+ [A-Z][a-z]+)\b'
+        actors1 = set(re.findall(actors_pattern, fact1))
+        actors2 = set(re.findall(actors_pattern, fact2))
+        if actors1 and actors2 and actors1 == actors2:
+            # Same actors mentioned - check if rest is similar
+            if jaccard_sim >= 0.2:  # Very low threshold when same actors
+                return True
+        
+        # Special check for physical transformations - any weight change is similar
+        weight_patterns = [r'gained.*(?:weight|pounds)', r'lost.*(?:weight|pounds)', r'weight', r'pounds']
+        has_weight1 = any(re.search(p, norm_fact1) for p in weight_patterns)
+        has_weight2 = any(re.search(p, norm_fact2) for p in weight_patterns)
+        if has_weight1 and has_weight2:
+            return True  # Any two weight-related facts are considered similar
+        
+        # AGGRESSIVE pattern matching for common similar topics
         patterns_to_check = [
             # Dance/choreography patterns
-            (r'choreograph\w*\s+.*danc\w*', r'choreograph\w*\s+.*danc\w*'),
-            (r'danc\w*\s+.*choreograph\w*', r'danc\w*\s+.*choreograph\w*'),
+            (r'choreograph\w*', r'choreograph\w*'),
+            (r'danc\w*', r'danc\w*'),
+            (r'viral.*danc\w*', r'viral.*danc\w*'),
+            (r'moves?', r'sequence'),
             # Improvisation patterns
             (r'improvisd?\w*', r'improvisd?\w*'),
             (r'ad[\s-]?libb?\w*', r'ad[\s-]?libb?\w*'),
             (r'unscripted', r'spontaneous'),
+            (r'made.*up', r'on.*spot'),
             # Acting method patterns
             (r'method\s+act\w*', r'stayed.*character'),
             (r'immersed.*role', r'preparation.*character'),
-            # Physical transformation
-            (r'gained.*weight', r'lost.*weight'),
+            (r'never.*broke.*character', r'stayed.*character'),
+            (r'lived.*character', r'became.*character'),
+            # Physical transformation - treat ALL weight changes as similar
+            (r'gained.*(?:weight|pounds)', r'gained.*(?:weight|pounds)'),
+            (r'lost.*(?:weight|pounds)', r'lost.*(?:weight|pounds)'),
+            (r'gained.*(?:weight|pounds)', r'lost.*(?:weight|pounds)'),
+            (r'lost.*(?:weight|pounds)', r'gained.*(?:weight|pounds)'),
+            (r'(?:gained|lost).*(?:weight|pounds)', r'(?:weight|pounds).*(?:role|character)'),
             (r'physical.*transformation', r'body.*change'),
+            (r'trained.*months?', r'workout.*routine'),
+            (r'diet', r'eating'),
             # Real life patterns
             (r'real\s+(?:life\s+)?(?:actual\s+)?', r'based.*true'),
             (r'(?:actually\s+)?(?:really\s+)?happen\w*', r'true.*story'),
+            (r'inspired.*real', r'based.*actual'),
             # Stunt patterns
             (r'own.*stunts?', r'did.*stunts?'),
             (r'stunt.*work', r'action.*sequence'),
+            (r'performed.*stunts?', r'no.*stunt.*double'),
             # Injury patterns
-            (r'injured.*filming', r'hurt.*set'),
-            (r'broke.*during', r'fractured.*while'),
+            (r'injured', r'hurt'),
+            (r'broke.*(?:during|while|filming)', r'fractured.*(?:during|while|filming)'),
+            (r'accident.*set', r'hurt.*filming'),
+            # Voice/accent patterns
+            (r'accent', r'voice'),
+            (r'learned.*speak', r'studied.*language'),
+            # Audition/casting patterns
+            (r'audition\w*', r'cast\w*'),
+            (r'almost.*played', r'originally.*cast'),
+            (r'first.*choice', r'wanted.*role'),
         ]
         
         for pattern1, pattern2 in patterns_to_check:
@@ -177,13 +216,13 @@ class SimilarityChecker:
             if match1 and match2:
                 # Both facts contain similar special patterns
                 # Check if they're about the same subject with lower threshold
-                if jaccard_sim >= 0.3:  # Much lower threshold when patterns match
+                if jaccard_sim >= 0.15:  # EXTREMELY low threshold when patterns match
                     return True
         
         return False
     
     @staticmethod
-    def check_movie_topic_diversity(new_title: str, existing_titles: Set[str], max_same_category: int = 2) -> Tuple[bool, str]:
+    def check_movie_topic_diversity(new_title: str, existing_titles: Set[str], max_same_category: int = 1) -> Tuple[bool, str]:
         """
         Check if adding this title would create too many similar topics for the same movie.
         Returns (should_block, reason)
