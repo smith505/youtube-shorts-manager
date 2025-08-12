@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.7.0"
+APP_VERSION = "2.7.1"
 VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "One movie = One use only (strict movie diversity)"
+VERSION_NOTES = "Better banned movies list to prevent token waste"
 
 import streamlit as st
 import os
@@ -1646,32 +1646,15 @@ def main():
                     full_prompt = base_prompt
                     
                     if used_titles:
-                        # Get movie usage counts using similarity checker
-                        movie_counts = SimilarityChecker.get_used_movies(used_titles)
+                        # Get all used movies with years for complete blocking
                         used_titles_list = list(used_titles)
-                        used_movies = set()  # Keep for compatibility
+                        used_movies_with_years = set()
                         
-                        # Extract movie names from ALL title formats
+                        # Extract complete movie names with years
                         for title in used_titles_list:
-                            # Pattern 1: "In Movie Name (Year)" - extract exact movie
-                            match = re.search(r'^In (.+?) \(\d{4}\)', title)
-                            if match:
-                                movie_name = match.group(1)
-                                used_movies.add(movie_name)
-                            
-                            # Pattern 2: "Movie Name (Year)" (without "In")
-                            elif re.search(r'^([^(]+) \(\d{4}\)', title):
-                                match = re.search(r'^([^(]+) \(\d{4}\)', title)
-                                movie_name = match.group(1).strip()
-                                used_movies.add(movie_name)
-                            
-                            # Pattern 3: Extract any recognizable content
-                            else:
-                                clean_title = title.replace('In ', '').strip()
-                                if '(' in clean_title and ')' in clean_title:
-                                    movie_part = clean_title.split('(')[0].strip()
-                                    if len(movie_part) > 3:
-                                        used_movies.add(movie_part)
+                            movie, _ = SimilarityChecker.extract_movie_and_fact(title)
+                            if movie:
+                                used_movies_with_years.add(movie)
                         
                         # Build comprehensive exclusion prompt for FACTS only, not movies
                         if used_titles_list:
@@ -1703,32 +1686,39 @@ def main():
                                 titles_display = '\n'.join(titles_to_send)
                                 sampling_note = f"\n(Showing {len(titles_to_send)} representative titles from {len(used_titles_list)} total)"
                             
-                            # Create strong exclusion prompt with file-like format
+                            # Create BANNED MOVIES list first
+                            banned_movies_list = "\n".join(sorted(used_movies_with_years)[:200])  # Limit to 200 for token efficiency
+                            
+                            # Create strong exclusion prompt with banned movies FIRST
                             exclusion_text = f"""
-🚫 CRITICAL DUPLICATE PREVENTION:
+🚫🚫🚫 BANNED MOVIES - DO NOT USE ANY OF THESE 🚫🚫🚫
 
-You have already created {len(used_titles_list)} movie facts. Below is the list of existing facts.
-You MUST generate completely different facts that are NOT similar to any of these:{sampling_note}
+These {len(used_movies_with_years)} movies have already been used. Each movie can only be used ONCE.
+DO NOT USE ANY OF THESE MOVIES:
 
-===== EXISTING FACTS FILE =====
-{titles_display}
-===== END OF FACTS FILE =====
+{banned_movies_list}
 
-STRICT RULES:
-1. DO NOT use any movie that appears in the list above - each movie can only be used ONCE
-2. DO NOT repeat any fact, even with different wording  
-3. DO NOT create similar facts (e.g., if "actor improvised scene" exists, don't create "actor ad-libbed dialogue")
-4. If a movie appears even once above, pick a DIFFERENT movie
-5. Focus on movies from different decades and genres for variety
-6. Generate fresh facts from COMPLETELY NEW movies not in the list
+🚫🚫🚫 END OF BANNED MOVIES LIST 🚫🚫🚫
+
+Now here are the existing facts for reference:
+
+===== EXISTING FACTS =====
+{titles_display[:50]}  
+===== END OF FACTS =====
+
+CRITICAL RULES:
+1. NEVER use any movie from the BANNED MOVIES list above
+2. Each movie can only be used ONCE - if it's in the banned list, pick a different movie
+3. Generate facts from COMPLETELY NEW movies not in the banned list
+4. Focus on diverse movies from different decades and genres
 """
                             full_prompt = f"{exclusion_text}\\n\\n{base_prompt}"
                         
-                        # Add variety instructions focused on FACT variety, not movie exclusion
-                        full_prompt += f" \\n\\n🎯 FACT VARIETY: You can use the same movies multiple times, but MUST use different facts, scenes, or behind-the-scenes information each time. For example, if 'The Dark Knight (2008)' was used with a fact about the Joker's makeup, you CAN use it again with a different fact about the IMAX cameras, Heath Ledger's preparation, or a different scene detail. Mix facts from different decades (1970s, 1980s, 1990s, 2000s, 2010s, 2020s, and current 2025/recent releases). \\n\\n🔥 TRENDING PRIORITY: For 2020s-2025 movies, prioritize films featuring currently trending/talked-about actors and actresses (like Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, Jacob Elordi, Jenna Ortega, etc.) as these generate higher engagement and are more likely to go viral."
+                        # Add strong movie diversity instructions
+                        full_prompt += f" \\n\\n⚠️ MOVIE RULES: NEVER reuse a movie. Each movie gets ONE fact only. Check the BANNED MOVIES list and pick something completely different. Mix facts from different decades (1970s-2020s). \\n\\n🔥 TRENDING: For new picks, consider trending actors (Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, etc.) but ONLY if their movies aren't already used."
                     else:
-                        # Even for first generation, encourage fact variety
-                        full_prompt += " \\n\\n🎯 FACT VARIETY: Feel free to use popular movies multiple times with DIFFERENT facts. Each movie has dozens of interesting facts - use different ones each time. Mix facts from different decades (1970s through present day 2025), different genres (horror, comedy, drama, sci-fi, action, thriller, romance), and different types of facts (production, acting, behind-the-scenes, technical, trivia). \\n\\n🔥 TRENDING BOOST: When selecting recent movies (2020s-2025), prioritize films with currently trending/popular actors and actresses (Sydney Sweeney, Zendaya, Timothée Chalamet, Anya Taylor-Joy, Jacob Elordi, Jenna Ortega, etc.) as these are more engaging and shareable for Gen Z/Alpha audiences."
+                        # Even for first generation, emphasize movie diversity
+                        full_prompt += " \\n\\n🎯 MOVIE DIVERSITY: Each movie can only be used ONCE. Pick from a wide variety of movies across different decades (1970s-2020s) and genres. \\n\\n🔥 TRENDING: Consider films with trending actors (Sydney Sweeney, Zendaya, Timothée Chalamet, etc.) for engagement."
                     
                     if extra_prompt.strip():
                         full_prompt += " " + extra_prompt.strip()
@@ -1759,8 +1749,8 @@ STRICT RULES:
                     for script_num in range(int(num_scripts)):
                         st.write(f"🔄 Generating script {script_num + 1} of {int(num_scripts)}...")
                         
-                        # Add instruction to generate ONLY ONE script from a NEW movie
-                        script_prompt = full_prompt + "\n\n⚠️ CRITICAL: Generate EXACTLY ONE movie fact script. Do not generate multiple scripts. Use a movie that hasn't been used in any previous facts."
+                        # Add final reminder about banned movies
+                        script_prompt = full_prompt + "\n\n⚠️ FINAL REMINDER: Generate EXACTLY ONE movie fact. The movie MUST NOT be in the BANNED MOVIES list shown above. If you're about to use Knives Out, The Menu, Scream, or any movie from the banned list - STOP and pick something else."
                         if int(num_scripts) > 1:
                             script_prompt += f" Generate unique content different from previous generations."
                         
