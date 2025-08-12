@@ -1180,13 +1180,41 @@ def main():
         if 'delete_titles_modal' in st.session_state and st.session_state.delete_titles_modal == selected_channel:
             st.markdown("---")
             with st.expander("🗑️ **Delete Existing Titles**", expanded=True):
-                st.info(f"Click the ❌ button next to any title to delete it from **{selected_channel}**.")
+                st.info(f"Select titles to delete from **{selected_channel}**. Use checkboxes for batch deletion.")
                 
-                # Add refresh button
-                col1, col2 = st.columns([3, 1])
+                # Add control buttons
+                col1, col2, col3 = st.columns([2, 1, 1])
                 with col1:
-                    st.write("") # spacer
+                    # Initialize selected titles if not exists
+                    if 'selected_for_deletion' not in st.session_state:
+                        st.session_state.selected_for_deletion = set()
+                    
+                    selected_count = len(st.session_state.selected_for_deletion)
+                    if selected_count > 0:
+                        st.write(f"**{selected_count} titles selected**")
+                    else:
+                        st.write("Select titles to delete")
+                        
                 with col2:
+                    if st.button("🗑️ Delete Selected", type="primary", disabled=selected_count == 0):
+                        if st.session_state.selected_for_deletion:
+                            with st.spinner(f"Deleting {selected_count} titles..."):
+                                titles_to_delete = list(st.session_state.selected_for_deletion)
+                                deleted_count, not_found = st.session_state.channel_manager.bulk_delete_titles(
+                                    selected_channel, titles_to_delete
+                                )
+                                if deleted_count > 0:
+                                    st.success(f"✅ Deleted {deleted_count} titles")
+                                    # Clear cache and selection
+                                    cache_key = f"cached_titles_{selected_channel}"
+                                    if cache_key in st.session_state:
+                                        del st.session_state[cache_key]
+                                    st.session_state.selected_for_deletion.clear()
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to delete titles")
+                                    
+                with col3:
                     if st.button("🔄 Force Refresh", help="Force reload from Google Drive"):
                         # Clear all caches and force Google Drive refresh
                         cache_key = f"cached_titles_{selected_channel}"
@@ -1195,6 +1223,7 @@ def main():
                         ordered_cache_key = f"ordered_titles_{selected_channel}"
                         if ordered_cache_key in st.session_state:
                             del st.session_state[ordered_cache_key]
+                        st.session_state.selected_for_deletion.clear()
                         
                         # Also try to refresh the drive manager connection
                         try:
@@ -1322,63 +1351,37 @@ def main():
                         
                         st.write(f"**{len(titles_list)} titles found (in file order):**")
                         
-                        # Show titles in groups of 5 for better organization
-                        for i in range(0, len(titles_list), 5):
-                            title_group = titles_list[i:i+5]
-                            
-                            for title in title_group:
-                                col1, col2 = st.columns([10, 1])
-                                with col1:
+                        # Add select/deselect all buttons
+                        col1, col2, col3 = st.columns([1, 1, 3])
+                        with col1:
+                            if st.button("✅ Select All"):
+                                st.session_state.selected_for_deletion = set(titles_list)
+                                st.rerun()
+                        with col2:
+                            if st.button("❌ Deselect All"):
+                                st.session_state.selected_for_deletion.clear()
+                                st.rerun()
+                        
+                        # Show titles with checkboxes for batch selection
+                        for i, title in enumerate(titles_list):
+                            col1, col2 = st.columns([1, 10])
+                            with col1:
+                                # Use checkbox for selection
+                                is_selected = title in st.session_state.selected_for_deletion
+                                checkbox_key = f"cb_{selected_channel}_{i}"
+                                if st.checkbox("", value=is_selected, key=checkbox_key):
+                                    st.session_state.selected_for_deletion.add(title)
+                                else:
+                                    st.session_state.selected_for_deletion.discard(title)
+                            with col2:
+                                # Show title with visual indicator if selected
+                                if title in st.session_state.selected_for_deletion:
+                                    st.markdown(f"🗑️ ~~{title}~~")
+                                else:
                                     st.write(f"• {title}")
-                                with col2:
-                                    # Use a more unique key and add disabled state for rapid clicks
-                                    button_key = f"delete_{selected_channel}_{hash(title)}_{i}"
-                                    
-                                    # Check if we're currently processing a deletion
-                                    processing_key = f"processing_delete_{selected_channel}"
-                                    is_processing = st.session_state.get(processing_key, False)
-                                    
-                                    if st.button("❌", key=button_key, help=f"Delete: {title}", disabled=is_processing):
-                                        # Set processing flag and start time to prevent rapid clicks
-                                        processing_start_key = f"processing_start_{selected_channel}"
-                                        st.session_state[processing_key] = True
-                                        st.session_state[processing_start_key] = datetime.now()
-                                        
-                                        try:
-                                            success, message = st.session_state.channel_manager.delete_title(selected_channel, title)
-                                            if success:
-                                                # Clear both caches to force refresh
-                                                cache_key = f"cached_titles_{selected_channel}"
-                                                if cache_key in st.session_state:
-                                                    del st.session_state[cache_key]
-                                                
-                                                # Also clear any ordered titles cache if it exists
-                                                ordered_cache_key = f"ordered_titles_{selected_channel}"
-                                                if ordered_cache_key in st.session_state:
-                                                    del st.session_state[ordered_cache_key]
-                                                
-                                                # Clear processing flag and start time
-                                                st.session_state[processing_key] = False
-                                                if processing_start_key in st.session_state:
-                                                    del st.session_state[processing_start_key]
-                                                
-                                                st.success(f"✅ Deleted: {title}")
-                                                st.rerun()
-                                            else:
-                                                st.session_state[processing_key] = False
-                                                if processing_start_key in st.session_state:
-                                                    del st.session_state[processing_start_key]
-                                                st.error(f"❌ {message}")
-                                        except Exception as e:
-                                            st.session_state[processing_key] = False
-                                            if processing_start_key in st.session_state:
-                                                del st.session_state[processing_start_key]
-                                            st.error(f"❌ Error deleting title: {str(e)}")
-                                            import traceback
-                                            st.error(f"Full error: {traceback.format_exc()}")
                             
-                            # Add a separator between groups for readability
-                            if i + 5 < len(titles_list):
+                            # Add separator every 10 items for readability
+                            if (i + 1) % 10 == 0 and i + 1 < len(titles_list):
                                 st.markdown("---")
                     
                     else:
@@ -1390,13 +1393,15 @@ def main():
                 # Cancel button at the bottom
                 st.markdown("---")
                 if st.button("❌ Close", type="secondary"):
-                    # Clear processing flags when closing modal
+                    # Clear processing flags and selection when closing modal
                     processing_key = f"processing_delete_{selected_channel}"
                     processing_start_key = f"processing_start_{selected_channel}"
                     if processing_key in st.session_state:
                         del st.session_state[processing_key]
                     if processing_start_key in st.session_state:
                         del st.session_state[processing_start_key]
+                    if 'selected_for_deletion' in st.session_state:
+                        st.session_state.selected_for_deletion.clear()
                     del st.session_state.delete_titles_modal
                     st.rerun()
         
