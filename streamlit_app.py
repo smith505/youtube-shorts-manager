@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.7.2"
-VERSION_DATE = "2024-12-11"
-VERSION_NOTES = "Fixed within-session duplicates by updating banned list after each generation"
+APP_VERSION = "2.8.0"
+VERSION_DATE = "2024-12-12"
+VERSION_NOTES = "Major improvements: Fixed delete tab issues, added pagination, enhanced duplicate prevention"
 
 import streamlit as st
 import os
