@@ -1366,10 +1366,10 @@ def main():
                         for i, title in enumerate(titles_list):
                             col1, col2 = st.columns([1, 10])
                             with col1:
-                                # Use checkbox for selection
+                                # Use checkbox for selection with proper label
                                 is_selected = title in st.session_state.selected_for_deletion
-                                checkbox_key = f"cb_{selected_channel}_{i}"
-                                if st.checkbox("", value=is_selected, key=checkbox_key):
+                                checkbox_key = f"del_cb_{i}"  # Simple unique key using just index
+                                if st.checkbox("Select", value=is_selected, key=checkbox_key, label_visibility="hidden"):
                                     st.session_state.selected_for_deletion.add(title)
                                 else:
                                     st.session_state.selected_for_deletion.discard(title)
