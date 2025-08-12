@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.8.3"
+APP_VERSION = "2.9.0"
 VERSION_DATE = "2024-12-12"
-VERSION_NOTES = "Enhanced debug: Shows full prompt sent to AI for each script generation"
+VERSION_NOTES = "Auto-retry when AI uses banned movies - up to 3 attempts with stronger prompts"
 
 import streamlit as st
 import os
@@ -1953,81 +1953,119 @@ REMEMBER: Using a banned movie = AUTOMATIC REJECTION
                                     if session_used_movies:
                                         st.caption("Session movies: " + ", ".join(list(session_used_movies)[:5]))
                         
-                        try:
-                            session_id = str(uuid.uuid4())
-                            result = st.session_state.claude_client.generate_script(script_prompt, session_id)
-                        except Exception as api_error:
-                            st.error(f"❌ API Error for script {script_num + 1}: {str(api_error)}")
-                            continue
+                        # Retry logic for when AI uses banned movies
+                        max_retries = 3
+                        retry_count = 0
+                        script_generated = False
                         
-                        if result["success"]:
-                            # Initialize variables to ensure they're always defined
-                            content = result.get("content", "No content available")
-                            titles = []
-                            
+                        while retry_count < max_retries and not script_generated:
                             try:
-                                # Extract and save titles
-                                titles = extract_titles_from_response(content)
+                                session_id = str(uuid.uuid4())
+                                result = st.session_state.claude_client.generate_script(script_prompt, session_id)
+                            except Exception as api_error:
+                                st.error(f"❌ API Error for script {script_num + 1}: {str(api_error)}")
+                                break
+                            
+                            if result["success"]:
+                                # Initialize variables to ensure they're always defined
+                                content = result.get("content", "No content available")
+                                titles = []
                                 
-                                # Debug: Show what titles were found
-                                if user_role == 'admin':
-                                    st.info(f"🔍 Debug: Extracted {len(titles)} titles from script {script_num + 1}")
-                                
-                                added_count = 0
-                                blocked_titles = []
-                                
-                                for title in titles:
-                                    try:
-                                        # Get fresh titles to check against
-                                        current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
-                                        is_dup, reason = SimilarityChecker.is_duplicate_title(title, current_titles)
-                                        
-                                        if not is_dup:
-                                            if st.session_state.channel_manager.add_title(selected_channel, title):
-                                                added_count += 1
-                                                # Track movie for this session
-                                                movie, _ = SimilarityChecker.extract_movie_and_fact(title)
-                                                if movie:
-                                                    session_used_movies.add(movie)
-                                                if user_role == 'admin':
-                                                    st.caption(f"✅ Saved title: {title}")
-                                        else:
-                                            blocked_titles.append((title, reason))
-                                            total_blocked += 1
-                                            if user_role == 'admin':
-                                                st.caption(f"🚫 Blocked title: {title} (Reason: {reason})")
-                                            
-                                            # If ALL titles from this script were blocked, show warning
-                                            if len(blocked_titles) == len(titles) and len(titles) > 0:
-                                                st.error(f"⚠️ Script {script_num + 1}: All titles were duplicates! The AI ignored the banned list.")
-                                                # Could add auto-retry here in future
-                                    except Exception as title_error:
-                                        st.error(f"❌ Failed to process title '{title}': {str(title_error)}")
-                                
-                                # Save script
                                 try:
-                                    user_name = current_user.get('first_name', 'Unknown User')
-                                    st.session_state.channel_manager.save_script(selected_channel, content, session_id, user_name)
-                                except Exception as script_error:
-                                    st.error(f"❌ Failed to save script {script_num + 1}: {str(script_error)}")
+                                    # Extract and save titles
+                                    titles = extract_titles_from_response(content)
+                                    
+                                    # Debug: Show what titles were found
+                                    if user_role == 'admin':
+                                        st.info(f"🔍 Debug: Extracted {len(titles)} titles from script {script_num + 1}")
+                                    
+                                    # PRE-CHECK: See if AI used a banned movie
+                                    will_be_blocked = False
+                                    for title in titles:
+                                        movie, _ = SimilarityChecker.extract_movie_and_fact(title)
+                                        if movie:
+                                            normalized_movie = SimilarityChecker.normalize_text(movie)
+                                            # Check against existing movies
+                                            for existing_movie in used_movies_with_years if 'used_movies_with_years' in locals() else []:
+                                                if SimilarityChecker.normalize_text(existing_movie) == normalized_movie:
+                                                    will_be_blocked = True
+                                                    if retry_count == 0:
+                                                        st.warning(f"⚠️ AI tried to use banned movie: {movie}")
+                                                    break
+                                    
+                                    # If AI used a banned movie, retry with stronger prompt
+                                    if will_be_blocked and retry_count < max_retries - 1:
+                                        retry_count += 1
+                                        st.warning(f"🔄 Retrying script {script_num + 1} (attempt {retry_count + 1}/{max_retries}) - AI used banned movie")
+                                        
+                                        # Rebuild prompt with REJECTION notice at the top
+                                        rejection_notice = f"❌❌❌ YOUR PREVIOUS ATTEMPT WAS REJECTED ❌❌❌\n\n"
+                                        rejection_notice += f"You tried to use a BANNED movie. DO NOT use any movie from the banned list!\n"
+                                        rejection_notice += f"Pick a COMPLETELY DIFFERENT movie that is NOT in the banned list.\n\n"
+                                        
+                                        # Prepend rejection notice to original prompt (not doubling it)
+                                        original_prompt = script_prompt  # Keep original for reference
+                                        script_prompt = rejection_notice + original_prompt
+                                        continue
+                                    
+                                    # If not blocked or max retries reached, proceed
+                                    added_count = 0
+                                    blocked_titles = []
+                                    
+                                    for title in titles:
+                                        try:
+                                            # Get fresh titles to check against
+                                            current_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
+                                            is_dup, reason = SimilarityChecker.is_duplicate_title(title, current_titles)
+                                        
+                                            if not is_dup:
+                                                if st.session_state.channel_manager.add_title(selected_channel, title):
+                                                    added_count += 1
+                                                    # Track movie for this session
+                                                    movie, _ = SimilarityChecker.extract_movie_and_fact(title)
+                                                    if movie:
+                                                        session_used_movies.add(movie)
+                                                    if user_role == 'admin':
+                                                        st.caption(f"✅ Saved title: {title}")
+                                            else:
+                                                blocked_titles.append((title, reason))
+                                                total_blocked += 1
+                                                if user_role == 'admin':
+                                                    st.caption(f"🚫 Blocked title: {title} (Reason: {reason})")
+                                                
+                                                # If ALL titles from this script were blocked, show warning
+                                                if len(blocked_titles) == len(titles) and len(titles) > 0:
+                                                    st.error(f"⚠️ Script {script_num + 1}: All titles were duplicates! The AI ignored the banned list.")
+                                        except Exception as title_error:
+                                            st.error(f"❌ Failed to process title '{title}': {str(title_error)}")
                                 
-                                # Store script info
-                                script_info = {
-                                    "script_number": script_num + 1,
-                                    "content": content,
-                                    "titles": titles,
-                                    "added_titles": added_count,
-                                    "blocked_titles": blocked_titles,
-                                    "session_id": session_id,
-                                    "token_usage": result.get('token_usage', {})
-                                }
-                                all_generated_scripts.append(script_info)
-                                total_added += added_count
-                                
-                            except Exception as processing_error:
-                                st.error(f"❌ Error processing script {script_num + 1}: {str(processing_error)}")
-                        else:
-                            st.error(f"❌ Script {script_num + 1} generation failed: {result.get('error', 'Unknown error')}")
+                                    # Save script
+                                    try:
+                                        user_name = current_user.get('first_name', 'Unknown User')
+                                        st.session_state.channel_manager.save_script(selected_channel, content, session_id, user_name)
+                                    except Exception as script_error:
+                                        st.error(f"❌ Failed to save script {script_num + 1}: {str(script_error)}")
+                                    
+                                    # Store script info
+                                    script_info = {
+                                        "script_number": script_num + 1,
+                                        "content": content,
+                                        "titles": titles,
+                                        "added_titles": added_count,
+                                        "blocked_titles": blocked_titles,
+                                        "session_id": session_id,
+                                        "token_usage": result.get('token_usage', {})
+                                    }
+                                    all_generated_scripts.append(script_info)
+                                    total_added += added_count
+                                    script_generated = True  # Mark as successful
+                                    
+                                except Exception as processing_error:
+                                    st.error(f"❌ Error processing script {script_num + 1}: {str(processing_error)}")
+                                    script_generated = True  # Still mark as done to avoid infinite loop
+                            else:
+                                st.error(f"❌ Script {script_num + 1} generation failed: {result.get('error', 'Unknown error')}")
+                                break  # Exit retry loop on API failure
                     
                     # Display overall results
                     if all_generated_scripts:
