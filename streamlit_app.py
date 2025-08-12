@@ -1872,20 +1872,25 @@ CRITICAL RULES:
                             banned_movies_list = "\n".join(sorted(used_movies_with_years)[:200])
                             
                             exclusion_text = f"""
-🚫🚫🚫 BANNED MOVIES - DO NOT USE ANY OF THESE 🚫🚫🚫
+🚫🚫🚫 CRITICALLY IMPORTANT - BANNED MOVIES LIST 🚫🚫🚫
 
-These {len(used_movies_with_years)} movies have already been used. Each movie can only be used ONCE.
-DO NOT USE ANY OF THESE MOVIES:
+ABSOLUTE RULE: Each movie can ONLY be used ONCE. The following {len(used_movies_with_years)} movies are PERMANENTLY BANNED.
+You MUST pick a COMPLETELY DIFFERENT movie that is NOT in this list:
 
 {banned_movies_list}
 
-🚫🚫🚫 END OF BANNED MOVIES LIST 🚫🚫🚫
+🚫🚫🚫 END OF BANNED LIST - DO NOT USE ANY MOVIE ABOVE 🚫🚫🚫
 
-CRITICAL RULES:
-1. NEVER use any movie from the BANNED MOVIES list above
-2. Each movie can only be used ONCE - if it's in the banned list, pick a different movie
-3. Generate facts from COMPLETELY NEW movies not in the banned list
-4. Focus on diverse movies from different decades and genres
+✅ WHAT TO DO INSTEAD:
+- Pick a movie that is NOT in the banned list above
+- Choose from different decades (70s, 80s, 90s, 2000s, 2010s, 2020s)
+- Vary genres (horror, comedy, drama, action, sci-fi, thriller)
+- Include both mainstream and indie films
+- Consider foreign films and documentaries
+
+⚠️ VERIFICATION CHECK:
+Before generating your fact, verify the movie you're about to use is NOT in the banned list above.
+If you're thinking of using a popular movie, it's probably already banned - CHECK THE LIST!
 """
                             script_prompt = f"{exclusion_text}\n\n{base_prompt}"
                             
@@ -1973,11 +1978,43 @@ CRITICAL RULES:
                     
                     # Display overall results
                     if all_generated_scripts:
-                        st.success(f"✅ Generated {len(all_generated_scripts)} script{'s' if len(all_generated_scripts) > 1 else ''}!")
-                        if total_added > 0:
-                            st.success(f"🎯 Added {total_added} new unique titles total!")
-                        if total_blocked > 0:
-                            st.warning(f"🚫 Blocked {total_blocked} duplicate/similar titles total!")
+                        # Calculate success metrics
+                        total_scripts = len(all_generated_scripts)
+                        success_rate = (total_added / total_scripts * 100) if total_scripts > 0 else 0
+                        duplicate_rate = (total_blocked / total_scripts * 100) if total_scripts > 0 else 0
+                        
+                        # Determine quality rating
+                        if duplicate_rate == 0:
+                            quality_msg = "🏆 **PERFECT!** Zero duplicates - 100% unique content!"
+                            quality_color = "success"
+                        elif duplicate_rate <= 20:
+                            quality_msg = "🎯 **EXCELLENT!** Very low duplicate rate!"
+                            quality_color = "success"
+                        elif duplicate_rate <= 40:
+                            quality_msg = "👍 **GOOD!** Acceptable duplicate rate!"
+                            quality_color = "info"
+                        else:
+                            quality_msg = "⚠️ **NEEDS IMPROVEMENT** - Consider using more diverse movies"
+                            quality_color = "warning"
+                        
+                        # Display comprehensive statistics
+                        st.success(f"✅ Generated {total_scripts} script{'s' if total_scripts > 1 else ''}!")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("✅ Unique Titles Added", total_added)
+                        with col2:
+                            st.metric("🚫 Duplicates Blocked", total_blocked)
+                        with col3:
+                            st.metric("📊 Success Rate", f"{success_rate:.0f}%")
+                        
+                        # Show quality assessment
+                        if quality_color == "success":
+                            st.success(quality_msg)
+                        elif quality_color == "info":
+                            st.info(quality_msg)
+                        else:
+                            st.warning(quality_msg)
                     
                     # Display each script
                     for script_info in all_generated_scripts:
