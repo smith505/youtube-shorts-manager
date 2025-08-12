@@ -27,7 +27,7 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "3.0.0"
+APP_VERSION = "3.1.0"
 VERSION_DATE = "2025-01-12"
 VERSION_NOTES = "Auto-retry when AI uses banned movies - up to 3 attempts with stronger prompts"
 
@@ -320,7 +320,7 @@ class ClaudeClient:
     def generate_script(self, prompt: str, session_id: str) -> Dict[str, Any]:
         """Generate a YouTube short script using Claude API with retry logic."""
         payload = {
-            "model": "claude-sonnet-4-20250514",
+            "model": "claude-3-5-sonnet-20241022",  # Best balance of quality and cost
             "max_tokens": 1000,
             "messages": [
                 {
@@ -1758,41 +1758,46 @@ def main():
                             if movie:
                                 used_movies_with_years.add(movie)
                         
-                        # Build comprehensive exclusion prompt with COMPLETE titles file
+                        # Build exclusion prompt optimized for ~4k tokens
                         if used_titles_list:
-                            # Show AI the COMPLETE titles file - no sampling
                             st.session_state.last_loaded_titles = used_titles_list
                             
-                            # Pass the COMPLETE list of existing titles from Google Drive
-                            all_existing_titles = "\n".join(used_titles_list)
+                            # Calculate how many titles we can fit in ~4k tokens
+                            # Rough estimate: prompt overhead ~500 tokens, leaving 3500 for titles
+                            # Average title ~20 tokens, so we can fit ~175 titles
+                            max_titles_for_tokens = 175
                             
-                            # Pass the COMPLETE Google Drive titles file to the AI
+                            # Send the most recent titles (most likely to be duplicated)
+                            if len(used_titles_list) > max_titles_for_tokens:
+                                titles_to_send = used_titles_list[-max_titles_for_tokens:]  # Most recent 175
+                                all_existing_titles = "\n".join(titles_to_send)
+                                titles_note = f" (Recent {len(titles_to_send)} of {len(used_titles_list)} total)"
+                            else:
+                                all_existing_titles = "\n".join(used_titles_list)
+                                titles_note = ""
+                            
+                            # Create exclusion prompt (optimized for token usage)
                             exclusion_text = f"""
-🛑🛑🛑 MANDATORY: READ MY GOOGLE DRIVE TITLES FILE 🛑🛑🛑
+🛑 RECENT TITLES FROM MY COLLECTION{titles_note} 🛑
 
-I'm passing you my COMPLETE Google Drive file with ALL {len(used_titles_list)} movie facts.
-This is my entire collection. Every movie below has already been used.
+These are my most recent movie facts. DO NOT use any movie that appears below:
 
-===== MY GOOGLE DRIVE TITLES FILE (titles.txt) =====
 {all_existing_titles}
-===== END OF FILE =====
 
-⚠️ CRITICAL RULES:
-1. The file above contains EVERY movie fact I've already created
-2. DO NOT use ANY movie that appears in that file
-3. Each movie can only be used ONCE - if it's in my file, it's BANNED
-4. Before choosing a movie, scan the file to ensure it's not there
-5. Pick a movie that is COMPLETELY ABSENT from my file
+⚠️ RULES:
+1. Every movie above has been used - they are ALL off-limits
+2. Pick a movie that is NOT in the list above
+3. Each movie can only be used ONCE
 
-🎯 YOUR TASK: Generate a fact about a movie NOT in my Google Drive file above.
+🎯 Generate a fact about a movie NOT in my list.
 """
-                            full_prompt = f"{exclusion_text}\n\n--- USER'S INSTRUCTIONS ---\n\n{base_prompt}"
+                            full_prompt = f"{exclusion_text}\n\n{base_prompt}"
                         
-                        # Add strong movie diversity instructions
-                        full_prompt += f"\n\n⚠️ IMPORTANT: Each movie in my Google Drive file has already been used. Pick a movie that's NOT in the file. Consider movies from different decades and genres for variety."
+                        # Keep prompt concise for token efficiency
+                        pass
                     else:
-                        # Even for first generation, emphasize movie diversity
-                        full_prompt += "\n\n🎯 MOVIE DIVERSITY: Each movie can only be used ONCE. Pick from a wide variety of movies across different decades (1970s-2020s) and genres for maximum variety."
+                        # No existing titles to exclude
+                        pass
                     
                     if extra_prompt.strip():
                         full_prompt += " " + extra_prompt.strip()
@@ -1829,31 +1834,29 @@ This is my entire collection. Every movie below has already been used.
                             used_titles = st.session_state.channel_manager.get_used_titles(selected_channel, force_refresh=True)
                             used_titles_list = list(used_titles)
                             
-                            # Get the COMPLETE updated titles file
-                            all_existing_titles = "\n".join(used_titles_list)
+                            # Get updated titles optimized for ~4k tokens
+                            max_titles_for_tokens = 175  # ~3500 tokens for titles
                             
-                            # Pass the UPDATED complete Google Drive file for subsequent scripts
+                            if len(used_titles_list) > max_titles_for_tokens:
+                                titles_to_send = used_titles_list[-max_titles_for_tokens:]  # Most recent
+                                all_existing_titles = "\n".join(titles_to_send)
+                                titles_note = f" ({len(titles_to_send)} recent of {len(used_titles_list)} total)"
+                            else:
+                                all_existing_titles = "\n".join(used_titles_list)
+                                titles_note = ""
+                            
+                            # Create updated exclusion prompt (optimized for tokens)
                             exclusion_text = f"""
-🛑🛑🛑 UPDATED GOOGLE DRIVE FILE - READ CAREFULLY 🛑🛑🛑
+🛑 UPDATED TITLES{titles_note} 🛑
 
-This is my UPDATED Google Drive file with {len(used_titles_list)} titles.
-NEW titles were just added from previous scripts.
+Script {script_num} just added new titles. This is the updated list:
 
-===== UPDATED GOOGLE DRIVE TITLES FILE (titles.txt) =====
 {all_existing_titles}
-===== END OF UPDATED FILE =====
 
-⚠️ THIS IS AN UPDATED FILE:
-1. New movies were JUST added from script {script_num}
-2. The file now contains MORE titles than before
-3. ALL movies in this updated file are OFF-LIMITS
-4. Do NOT repeat any movie from the file
-5. Pick a movie that is COMPLETELY ABSENT from this updated file
-
-🎯 YOUR TASK: Generate a fact about a movie NOT in my updated Google Drive file above.
+⚠️ ALL movies above are OFF-LIMITS. Pick a different movie.
 """
                             # Combine with user's instructions
-                            script_prompt = f"{exclusion_text}\n\n--- USER'S INSTRUCTIONS ---\n\n{base_prompt}"
+                            script_prompt = f"{exclusion_text}\n\n{base_prompt}"
                             
                             if extra_prompt.strip():
                                 script_prompt += "\n\nAdditional instructions: " + extra_prompt.strip()
@@ -1863,12 +1866,8 @@ NEW titles were just added from previous scripts.
                             # First script uses original prompt
                             script_prompt = full_prompt
                         
-                        # Add final reminders
-                        script_prompt += "\n\n🛑 BEFORE YOU START:\n"
-                        script_prompt += "1. Check the Google Drive file above\n" 
-                        script_prompt += "2. Make sure your chosen movie is NOT in that file\n"
-                        script_prompt += "3. Remember: Each movie can only be used ONCE\n"
-                        script_prompt += "\n⚠️ If you use a movie from my Google Drive file, it will be rejected as a duplicate."
+                        # Keep reminders brief for token efficiency
+                        script_prompt += "\n\n⚠️ Don't use any movie from the list above!"
                         
                         # Debug: Show the ACTUAL prompt being sent for THIS script
                         if user_role == 'admin':
