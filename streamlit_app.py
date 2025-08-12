@@ -27,9 +27,9 @@ Usage:
 """
 
 # Version information
-APP_VERSION = "2.8.2"
+APP_VERSION = "2.8.3"
 VERSION_DATE = "2024-12-12"
-VERSION_NOTES = "Unified prompt structure: Banned list + user prompt combined properly for all scripts"
+VERSION_NOTES = "Enhanced debug: Shows full prompt sent to AI for each script generation"
 
 import streamlit as st
 import os
@@ -1926,6 +1926,32 @@ REMEMBER: Using a banned movie = AUTOMATIC REJECTION
                         script_prompt += "2. Double-check it's not in the banned list\n"
                         script_prompt += "3. If you're about to use The Thing, The Wicker Man, Taxi Driver, Poltergeist, or Whiplash - STOP! They're BANNED!\n"
                         script_prompt += "\n⚠️ FINAL WARNING: If you use a banned movie, your response will be REJECTED. Pick something NEW and DIFFERENT!"
+                        
+                        # Debug: Show the ACTUAL prompt being sent for THIS script
+                        if user_role == 'admin':
+                            with st.expander(f"🔍 **DEBUG: Full Prompt for Script {script_num + 1}** (Admin Only)", expanded=False):
+                                st.text_area(f"Exact prompt being sent to AI for script {script_num + 1}:", 
+                                           value=script_prompt, height=300, disabled=True, 
+                                           key=f"debug_prompt_{script_num}")
+                                # Show stats
+                                prompt_length = len(script_prompt)
+                                estimated_tokens = prompt_length / 4
+                                st.write(f"**Prompt length:** {prompt_length:,} characters (≈{int(estimated_tokens):,} tokens)")
+                                
+                                # Show banned movies count
+                                if 'used_movies_with_years' in locals():
+                                    st.write(f"**Total banned movies:** {len(used_movies_with_years)}")
+                                    with st.expander("View banned movies list", expanded=False):
+                                        banned_list = sorted(list(used_movies_with_years))[:50]
+                                        for i, movie in enumerate(banned_list, 1):
+                                            st.caption(f"{i}. {movie}")
+                                        if len(used_movies_with_years) > 50:
+                                            st.caption(f"... and {len(used_movies_with_years) - 50} more")
+                                
+                                if script_num > 0:
+                                    st.write(f"**Movies added this session:** {len(session_used_movies)}")
+                                    if session_used_movies:
+                                        st.caption("Session movies: " + ", ".join(list(session_used_movies)[:5]))
                         
                         try:
                             session_id = str(uuid.uuid4())
